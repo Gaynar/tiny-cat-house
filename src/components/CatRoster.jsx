@@ -20,6 +20,7 @@ export function CatRoster({ draggingCatId, isDragging, onCatPointerDown, onOpenC
               className={`cat-roster-button ${isActiveDrag ? 'dragging' : ''}`}
               key={cat.id}
               type="button"
+              data-tutorial-target={cat.id === 'miso' ? 'miso-card' : undefined}
               onPointerDown={(event) => onCatPointerDown(cat.id, event)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {

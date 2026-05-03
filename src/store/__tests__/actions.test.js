@@ -29,8 +29,8 @@ describe('cat room actions', () => {
       currentRoom: 'bedroom',
       currentState: 'active',
       stateEnteredAt: nowMs,
-      stateTransitionDue: null,
     });
+    expect(result.state.cats.find((cat) => cat.id === 'miso').stateTransitionDue).toBeGreaterThan(nowMs);
     expect(state.cats.find((cat) => cat.id === 'miso').currentRoom).toBeNull();
   });
 

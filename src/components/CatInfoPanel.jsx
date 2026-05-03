@@ -4,6 +4,7 @@ import { furniture } from '../data/furniture.js';
 import { rooms } from '../data/rooms.js';
 import { useGameState } from '../store/gameState.js';
 import { calculateCatOutput } from '../store/production.js';
+import { getTier } from '../store/relationships.js';
 import { CatFullArt } from './CatFullArt.jsx';
 import { CatPortrait } from './CatPortrait.jsx';
 
@@ -70,6 +71,15 @@ export function CatInfoPanel({ catId, onClose }) {
           <div>
             <dt>Output</dt>
             <dd>{output ? `${output.coins.toFixed(1)} coin/min, ${output.comfort.toFixed(1)} comfort/min` : 'Idle'}</dd>
+          </div>
+          <div>
+            <dt>Relations</dt>
+            <dd>
+              {state.cats
+                .filter((cat) => cat.id !== catId)
+                .map((cat) => `${cat.name} - ${getTier(state, catId, cat.id)}`)
+                .join(', ')}
+            </dd>
           </div>
         </dl>
       </aside>

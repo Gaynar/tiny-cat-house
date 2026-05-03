@@ -12,7 +12,7 @@ export function ResourceBar() {
           <Coins aria-hidden="true" />
           <span>{Math.floor(state.resources.coins)}</span>
         </div>
-        <div className="resource-pill comfort" aria-label="Comfort">
+        <div className="resource-pill comfort" aria-label="Comfort" data-tutorial-target="comfort-pill">
           <Heart aria-hidden="true" />
           <span>{Math.floor(state.resources.comfort)}</span>
         </div>

@@ -4,6 +4,7 @@ import { rooms } from '../data/rooms.js';
 import { roomCapacity, unassignCat } from '../store/actions.js';
 import { useGameState } from '../store/gameState.js';
 import { calculateRoomOutput } from '../store/production.js';
+import { previewPlacement } from '../store/preview.js';
 import { CatSprite } from './CatSprite.jsx';
 
 const ROOM_COLORS = {
@@ -12,7 +13,7 @@ const ROOM_COLORS = {
   bedroom: '#8eb0d6',
 };
 
-export function RoomView({ roomId, draggingCatId, isDragHovered, message, onOpenCatInfo }) {
+export function RoomView({ roomId, draggingCatId, isDragHovered, message, onOpenCatInfo, onOpenRoomDetail }) {
   const { state, setState } = useGameState();
   const [imageMissing, setImageMissing] = useState(false);
   const room = rooms.find((entry) => entry.id === roomId);
@@ -21,6 +22,8 @@ export function RoomView({ roomId, draggingCatId, isDragHovered, message, onOpen
   const towerFloor = savedRoom?.towerFloor ?? room.towerFloor;
   const assignedCats = state.cats.filter((cat) => cat.currentRoom === roomId);
   const output = calculateRoomOutput(state, roomId);
+  const draggingCat = state.cats.find((cat) => cat.id === draggingCatId);
+  const preview = draggingCat ? previewPlacement(draggingCat, { ...room, ...savedRoom }, assignedCats) : 'neutral';
 
   function handleUnassignCat(catId) {
     setState((currentState) => unassignCat(currentState, catId, Date.now()));
@@ -30,8 +33,14 @@ export function RoomView({ roomId, draggingCatId, isDragHovered, message, onOpen
     <section
       className={`room-view ${isDragHovered ? 'drag-hovered' : ''}`}
       data-room-id={roomId}
+      data-tutorial-target={roomId === 'bedroom' ? 'bedroom-room' : undefined}
       style={{ '--room-color': ROOM_COLORS[roomId] }}
-      aria-label={`${room.name}, floor ${towerFloor}, level ${level}, ${assignedCats.length} of ${roomCapacity(roomId)} cats`}
+      aria-label={`${room.name}, floor ${towerFloor}, level ${level}, ${assignedCats.length} of ${roomCapacity(roomId, state)} cats`}
+      onClick={(event) => {
+        if (!draggingCatId && event.target === event.currentTarget) {
+          onOpenRoomDetail(roomId);
+        }
+      }}
     >
       {!imageMissing ? (
         <img
@@ -44,10 +53,10 @@ export function RoomView({ roomId, draggingCatId, isDragHovered, message, onOpen
         <div className="room-fallback" aria-hidden="true" />
       )}
       <div className="room-floor" aria-hidden="true" />
-      <div className="room-label">
+      <button className="room-label" type="button" onClick={() => onOpenRoomDetail(roomId)}>
         <span className="room-floor-badge">{towerFloor}F</span>
         {room.name}
-      </div>
+      </button>
       <div className="room-output">
         {output.coins.toFixed(1)} coin/min · {output.comfort.toFixed(1)} comfort/min
       </div>
@@ -74,7 +83,7 @@ export function RoomView({ roomId, draggingCatId, isDragHovered, message, onOpen
         ))}
       </div>
       {draggingCatId ? (
-        <div className="place-overlay" aria-hidden="true">
+        <div className={`place-overlay preview-${preview}`} aria-hidden="true">
           Drop here
         </div>
       ) : null}

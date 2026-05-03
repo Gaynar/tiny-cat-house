@@ -1,12 +1,11 @@
 import { useEffect } from 'react';
-import { runTick } from '../store/tick.js';
 
-export function useGameTick(setState) {
+export function useGameTick(onTick) {
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      setState((state) => runTick(state, Date.now()));
+      onTick(Date.now());
     }, 5000);
 
     return () => window.clearInterval(intervalId);
-  }, [setState]);
+  }, [onTick]);
 }
