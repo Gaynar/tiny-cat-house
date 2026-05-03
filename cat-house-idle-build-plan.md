@@ -30,7 +30,7 @@ Goal: a player opens the page, sees a cutaway house with 3 rooms, drags 3 cats i
 2. Install dependencies: `react`, `react-dom`, `lucide-react`. (Vite installs the rest.)
 3. Add the Nunito Google Font link to `index.html` (`<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">`). Set `body { font-family: 'Nunito', sans-serif; }` in the base CSS.
 4. Create global CSS rule `.pixel-art { image-rendering: pixelated; image-rendering: crisp-edges; }`.
-5. Create the empty asset folder structure under `public/assets/` (so paths resolve at `/assets/...` in dev): `cats/portraits/`, `cats/sprites/`, `rooms/`, `furniture/`, `ui/`, `audio/`. Drop a `.gitkeep` in each.
+5. Create the empty asset folder structure under `public/assets/` (so paths resolve at `/assets/...` in dev): `cats/portraits/`, `cats/sprites/`, `cats/full-art/`, `rooms/`, `furniture/`, `ui/`, `audio/`. Drop a `.gitkeep` in each.
 6. Create the `src/` subfolders: `components/`, `hooks/`, `data/`, `store/`. Empty for now.
 7. Replace the default Vite `App.jsx` with a minimal "Cat House Idle" placeholder heading so we can see the font rendering.
 8. Add a `.gitignore` covering `node_modules/`, `dist/`, `.DS_Store`.
@@ -107,25 +107,34 @@ Goal: a player opens the page, sees a cutaway house with 3 rooms, drags 3 cats i
 
 ---
 
-## Step 5 — Cat assignment (tap-to-place)
+## Step 5 — Cat assignment (drag-to-place + cat info)
 
-**Goal:** A cat roster row showing the 3 cats. Player can tap a cat, then tap a room to assign. Cats appear in the room they're assigned to. Capacity is enforced.
+**Goal:** A cat roster row showing the 3 cats. Player can drag a cat directly onto a room to assign them, without a click-to-select placement step. Clicking/tapping a cat opens a cat info panel instead. Cats appear in the room they're assigned to. Capacity is enforced.
 
-**Inputs:** GDD Section 16.5 (room detail panel, tap-to-select + tap-to-place must work, 44×44px touch targets), Section 16.7 (over-capacity prevented at point of assignment), Appendix A.3 (cat sprite paths + placeholder = colored circle with cat initial). Memory: `cat.currentRoom` is the single source of truth; rooms do not store catsAssigned.
+**Inputs:** GDD Section 16.5 (room detail panel, placement UI, 44×44px touch targets), Section 16.7 (over-capacity prevented at point of assignment), Appendix A.3 (cat sprite paths + placeholder = colored circle with cat initial). Memory: `cat.currentRoom` is the single source of truth; rooms do not store catsAssigned. Product update: cat click/tap is reserved for cat information; room assignment uses drag-and-drop.
 
 **Do:**
 1. **`src/components/CatSprite.jsx`** — props: `catId`, `state` (default `'active'`), `frame` (default `0`, unused for now — stub per A.8). Loads `/assets/cats/sprites/{catId}.png`, falls back to a colored circle with the cat's initial. Apply `.pixel-art`.
-2. **`src/components/CatPortrait.jsx`** — same idea but loads `/assets/cats/portraits/{catId}.png` at 64px. Used in roster.
-3. **`src/components/CatRoster.jsx`** — horizontal row at the bottom (or wherever sensible) showing each cat. Tapping a cat sets a "selected cat" state (lift this into a small piece of UI state in `App.jsx` or a new `useSelectedCat` hook — don't put it in the save). Selected cat gets a visible highlight. Show only cats whose `currentRoom === null`.
-4. **`src/components/RoomView.jsx`** — extend: when there is a selected cat, show a "tap to place here" affordance overlay. Tapping the room calls an action that sets `cat.currentRoom = roomId` (only if room is below capacity). If at capacity, show a brief inline message and don't assign. After assignment, clear the selected cat. Render any cats currently in the room as `<CatSprite>` instances inside the room.
-5. Add a "remove from room" affordance — tapping a cat already placed in a room sets `currentRoom: null` (keeps things testable; final UX comes later).
-6. Action helpers go in `src/store/actions.js` if you make one (e.g. `assignCat(state, catId, roomId)`, `unassignCat(state, catId)`). Keep them as pure `state → newState` functions.
+2. **`src/components/CatPortrait.jsx`** — same idea but loads `/assets/cats/portraits/{catId}.png` at 64px. Used in roster and info panels.
+3. **`src/components/CatFullArt.jsx`** — loads `/assets/cats/full-art/{catId}.png` into a large framed area for future pixel full-body art. If missing, render a tasteful pixel placeholder using the cat's color/initial. Apply `.pixel-art`.
+4. **`src/components/CatInfoPanel.jsx`** — opens when the player clicks/taps a cat in the roster or a placed cat in a room. Shows `CatFullArt`, portrait/name, traits, role, flavor text, known like/dislike, favorite furniture, current room, and current per-minute output if assigned. This panel is UI state only; do not store it in the save.
+5. **`src/components/CatRoster.jsx`** — horizontal row at the bottom (or wherever sensible) showing each unassigned cat. Each cat card:
+   - Starts a drag on pointer/touch movement, with a visible drag ghost or lifted-card state.
+   - Opens `CatInfoPanel` on click/tap when there was no meaningful drag movement.
+   - Keeps touch targets reasonably finger-sized (~44px).
+   Use a small UI state in `App.jsx` or a hook such as `useCatDrag` for `draggingCatId` / pointer coordinates. Do not put drag state in the save.
+6. **`src/components/RoomView.jsx`** — extend as a drop target. While a cat is being dragged, show a "drop here" affordance overlay and highlight the room under the pointer. Dropping calls an action that sets `cat.currentRoom = roomId` (only if room is below capacity). If at capacity, show a brief inline message and don't assign. Render any cats currently in the room as `<CatSprite>` instances inside the room.
+7. Add a "remove from room" affordance that does not conflict with cat info. Use a small explicit button/icon on a placed cat (for example Lucide `X`) to set `currentRoom: null`; clicking the cat body still opens `CatInfoPanel`.
+8. Action helpers go in `src/store/actions.js` if you make one (e.g. `assignCat(state, catId, roomId)`, `unassignCat(state, catId)`). Keep them as pure `state → newState` functions.
 
 **Acceptance:**
 - All 3 cats start in the roster (none assigned).
-- Tap cat → tap room → cat moves to that room and disappears from roster.
+- Drag cat → drop on room → cat moves to that room and disappears from roster.
+- Clicking/tapping a cat without dragging opens the cat info panel instead of selecting the cat for placement.
+- The cat info panel includes a large full-art area that attempts to load `/assets/cats/full-art/{catId}.png` and falls back cleanly while those assets do not exist.
 - Kitchen blocks the 2nd cat (capacity 1). Living Room and Bedroom block the 3rd (capacity 2).
-- Tapping an assigned cat in a room returns it to the roster.
+- Clicking/tapping an assigned cat in a room opens the cat info panel.
+- Using the explicit remove affordance on an assigned cat returns it to the roster.
 - Touch targets are reasonably finger-sized (~44px).
 - Save persists assignments across reload.
 
@@ -197,22 +206,22 @@ Each step here can be done independently against the MVP. Pick the order that ma
 
 ---
 
-## Step 8 — Like/Dislike preview indicators + room detail panel
+## Step 8 — Like/Dislike drag preview indicators + room detail panel
 
-**Goal:** When a cat is selected for placement, each room shows green (Like will activate) / amber (Dislike will activate) tint. Tapping an already-occupied room opens a detail panel showing each assigned cat's status, output, and Like/Dislike indicator.
+**Goal:** While a cat is being dragged for placement, each room shows green (Like will activate) / amber (Dislike will activate) tint. Tapping an already-occupied room opens a room detail panel showing each assigned cat's status, output, and Like/Dislike indicator.
 
 **Inputs:** GDD Section 16.5 (placement preview indicator: green/amber/no tint, Dislike priority on ambiguous), 14.1 (always-visible info), 16.7 (Dislike wins on conflict).
 
 **Do:**
 1. **`src/store/preview.js`** — pure function `previewPlacement(cat, room, currentCatsInRoom) → 'like'|'dislike'|'neutral'`. Evaluates whether placing this cat here would activate Like or Dislike. Dislike wins ties.
-2. Update `src/components/RoomView.jsx`: while a cat is selected, render a tinted overlay (`rgba(0,200,80,0.25)` for like, `rgba(220,160,40,0.30)` for dislike, none for neutral). Use `previewPlacement`.
-3. **`src/components/RoomDetailPanel.jsx`** — opens on room tap (when no cat is selected). Shows: room name + level, list of assigned cat slot cards (portrait, name, current state, current per-minute output, like/dislike status icon — Lucide `CheckCircle` green or `AlertTriangle` amber), empty slot placeholders. Mobile: bottom sheet. For now web layout can be a modal / inline panel — full responsive lands in Step 17.
-4. Wire the panel: tap a room with no selected cat → open panel; tap outside → close.
+2. Update `src/components/RoomView.jsx`: while a cat is being dragged, render a tinted overlay (`rgba(0,200,80,0.25)` for like, `rgba(220,160,40,0.30)` for dislike, none for neutral). Use `previewPlacement`.
+3. **`src/components/RoomDetailPanel.jsx`** — opens on room tap (when no cat drag is active). Shows: room name + level, list of assigned cat slot cards (portrait, name, current state, current per-minute output, like/dislike status icon — Lucide `CheckCircle` green or `AlertTriangle` amber), empty slot placeholders. Mobile: bottom sheet. For now web layout can be a modal / inline panel — full responsive lands in Step 17.
+4. Wire the panel: tap a room when no cat drag is active → open panel; tap outside → close. Clicking/tapping a cat inside the room still opens the cat info panel from Step 5, so keep room-panel taps scoped to the room background/label area.
 
 **Acceptance:**
-- Select Miso → Bedroom tints green, all other rooms tint neutral (or amber if she'd be crowded).
-- Select Bean → Living Room tints green if at least 1 cat is already there, neutral otherwise.
-- Select Mochi → Kitchen tints green only if Kitchen is empty.
+- Drag Miso → Bedroom tints green, all other rooms tint neutral (or amber if she'd be crowded).
+- Drag Bean → Living Room tints green if at least 1 cat is already there, neutral otherwise.
+- Drag Mochi → Kitchen tints green only if Kitchen is empty.
 - Tap an occupied room → detail panel shows each cat with their current status.
 
 ---
@@ -346,13 +355,13 @@ Each step here can be done independently against the MVP. Pick the order that ma
 
 ## Step 14 — Tutorial
 
-**Goal:** First-launch sequence: 5 linear steps walking the player through tapping Miso, placing her in the Bedroom (in Sleeping state immediately, skipping transitions), watching Comfort tick, collecting, and tapping the upgrade button. After completion, force-fire Hidden Toy on Bean.
+**Goal:** First-launch sequence: 5 linear steps walking the player through dragging Miso into the Bedroom (in Sleeping state immediately, skipping transitions), watching Comfort tick, collecting, and tapping the upgrade button. After completion, force-fire Hidden Toy on Bean.
 
 **Inputs:** GDD Section 16.5 (tutorial steps table, post-tutorial event, dismissable to skip). Memory: Step 2 places Miso directly in Sleeping (skip transition); post-tutorial Bean event auto-assigns Bean to Living Room if unassigned.
 
 **Do:**
 1. **`src/components/Tutorial.jsx`** — reads `state.tutorialStep`, renders a tooltip/spotlight for the current step. Each step listens for the appropriate user action and advances `tutorialStep`. A dismiss button on every tooltip jumps `tutorialStep` to 5.
-2. Implement the 5 steps per Section 16.5. Step 2: when the assignment fires for Miso → Bedroom during the tutorial, override the normal flow to set `currentState: 'sleeping'`, `stateEnteredAt: now`, sample new `stateTransitionDue` for the Sleeping → Active transition.
+2. Implement the 5 steps per Section 16.5, adapted for drag-to-place. Step 2: when the assignment fires for Miso → Bedroom during the tutorial, override the normal flow to set `currentState: 'sleeping'`, `stateEnteredAt: now`, sample new `stateTransitionDue` for the Sleeping → Active transition.
 3. **Post-tutorial event:** in `runTick`, after `tutorialStep` reaches 5, on the very next tick, force-fire Hidden Toy on Bean. If Bean is unassigned, auto-assign her to Living Room first. Mark this with a one-shot flag (e.g. `state.pendingPostTutorialEvent = true`) to ensure it only fires once.
 4. Suppress organic event firing during the tutorial (steps 0–4) so the tooltips aren't drowned out.
 
