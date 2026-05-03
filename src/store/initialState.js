@@ -17,6 +17,7 @@ export function createInitialState() {
   return {
     version: 1,
     lastTickTimestamp: now,
+    lastEventCheckAt: now,
     resources: {
       coins: 0.0,
       comfort: 0.0,
@@ -32,6 +33,9 @@ export function createInitialState() {
       currentState: 'active',
       stateEnteredAt: now,
       stateTransitionDue: null,
+      currentRoomEnteredAt: null,
+      currentSessionCounted: false,
+      offlineAloneDislike: false,
       relationships: relationshipsFor(cat.id),
       roomSessions: roomSessions(),
     })),
@@ -58,5 +62,7 @@ export function createInitialState() {
       soundEnabled: false,
     },
     tutorialStep: 0,
+    pendingPostTutorialEvent: false,
+    postTutorialEventFired: false,
   };
 }

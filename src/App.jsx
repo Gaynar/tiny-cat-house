@@ -1,17 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { CatInfoPanel } from './components/CatInfoPanel.jsx';
+import { CatDiary } from './components/CatDiary.jsx';
 import { CatRoster } from './components/CatRoster.jsx';
 import { Diorama } from './components/Diorama.jsx';
+import { EventCardStack } from './components/EventCardStack.jsx';
+import { OfflineSummaryOverlay } from './components/OfflineSummaryOverlay.jsx';
 import { ResourceBar } from './components/ResourceBar.jsx';
+import { RoomDetailPanel } from './components/RoomDetailPanel.jsx';
+import { Tutorial } from './components/Tutorial.jsx';
 import { assignCat } from './store/actions.js';
 import { GameStateProvider, useGameState } from './store/gameState.js';
 import { resetSave } from './store/persistence.js';
+import { sampleTransitionDue } from './store/transitions.js';
 
 const DRAG_THRESHOLD = 8;
 
 function Game() {
-  const { state, setState } = useGameState();
+  const { state, setState, liveEvents, dismissLiveEvent } = useGameState();
   const [activeCatInfoId, setActiveCatInfoId] = useState(null);
+  const [activeRoomId, setActiveRoomId] = useState(null);
+  const [diaryOpen, setDiaryOpen] = useState(false);
   const [dragState, setDragState] = useState(null);
   const [hoveredRoomId, setHoveredRoomId] = useState(null);
   const [roomMessage, setRoomMessage] = useState(null);
@@ -23,6 +31,21 @@ function Game() {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    if (state.tutorialStep === 1 && state.resources.comfort > 0) {
+      setState((currentState) => ({ ...currentState, tutorialStep: 2 }));
+    } else if (state.tutorialStep === 2 && state.resources.comfort >= 1) {
+      setState((currentState) => ({ ...currentState, tutorialStep: 3 }));
+    }
+  }, [state.resources.comfort, state.tutorialStep, setState]);
+
+  useEffect(() => {
+    document.body.dataset.tutorialStep = String(state.tutorialStep ?? 0);
+    return () => {
+      delete document.body.dataset.tutorialStep;
+    };
+  }, [state.tutorialStep]);
 
   function showRoomMessage(roomId, text) {
     window.clearTimeout(messageTimeoutRef.current);
@@ -97,7 +120,27 @@ function Game() {
         if (roomId) {
           const dropResult = assignCat(stateRef.current, finalDrag.catId, roomId, Date.now());
           if (dropResult.ok) {
-            setState(dropResult.state);
+            const nowMs = Date.now();
+            let nextState = dropResult.state;
+            if (nextState.tutorialStep === 0 && finalDrag.catId === 'miso' && roomId === 'bedroom') {
+              nextState = {
+                ...nextState,
+                tutorialStep: 1,
+                cats: nextState.cats.map((cat) =>
+                  cat.id === 'miso'
+                    ? {
+                        ...cat,
+                        currentState: 'sleeping',
+                        stateEnteredAt: nowMs,
+                        stateTransitionDue: sampleTransitionDue('sleeping', cat, nowMs),
+                      }
+                    : cat,
+                ),
+              };
+            } else if (nextState.tutorialStep === 0) {
+              nextState = { ...nextState, tutorialStep: 1 };
+            }
+            setState(nextState);
           } else {
             showRoomMessage(roomId, dropResult.reason);
           }
@@ -132,11 +175,20 @@ function Game() {
   return (
     <div className="app-shell">
       <ResourceBar />
+      <div className="top-actions">
+        <button type="button" onClick={() => setDiaryOpen(true)}>Diary</button>
+      </div>
       <Diorama
         draggingCatId={dragState?.isDragging ? dragState.catId : null}
         hoveredRoomId={hoveredRoomId}
         roomMessage={roomMessage}
         onOpenCatInfo={setActiveCatInfoId}
+        onOpenRoomDetail={(roomId) => {
+          setActiveRoomId(roomId);
+          if (state.tutorialStep === 3) {
+            setState((currentState) => ({ ...currentState, tutorialStep: 4 }));
+          }
+        }}
       />
       <div className="debug-row">
         <button className="debug-reset" type="button" onClick={handleResetSave}>
@@ -159,6 +211,19 @@ function Game() {
         </div>
       ) : null}
       {activeCatInfoId ? <CatInfoPanel catId={activeCatInfoId} onClose={() => setActiveCatInfoId(null)} /> : null}
+      {activeRoomId ? (
+        <RoomDetailPanel
+          roomId={activeRoomId}
+          onClose={() => setActiveRoomId(null)}
+          onOpenCatInfo={(catId) => {
+            setActiveCatInfoId(catId);
+          }}
+        />
+      ) : null}
+      {diaryOpen ? <CatDiary onClose={() => setDiaryOpen(false)} /> : null}
+      <EventCardStack events={liveEvents} onDismiss={dismissLiveEvent} />
+      <Tutorial />
+      <OfflineSummaryOverlay />
     </div>
   );
 }

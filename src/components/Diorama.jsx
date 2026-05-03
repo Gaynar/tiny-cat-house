@@ -6,7 +6,7 @@ const TOWER_ROOM_ORDER = [...rooms]
   .sort((a, b) => b.towerFloor - a.towerFloor)
   .map((room) => room.id);
 
-export function Diorama({ draggingCatId, hoveredRoomId, roomMessage, onOpenCatInfo }) {
+export function Diorama({ draggingCatId, hoveredRoomId, roomMessage, onOpenCatInfo, onOpenRoomDetail }) {
   return (
     <main className="app-main">
       <div className="tower-shell" aria-label="Cat tower rooms">
@@ -20,6 +20,7 @@ export function Diorama({ draggingCatId, hoveredRoomId, roomMessage, onOpenCatIn
               isDragHovered={hoveredRoomId === roomId}
               message={roomMessage?.roomId === roomId ? roomMessage.text : ''}
               onOpenCatInfo={onOpenCatInfo}
+              onOpenRoomDetail={onOpenRoomDetail}
             />
           ))}
         </div>

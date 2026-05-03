@@ -201,6 +201,7 @@ button {
   background: rgba(255, 251, 242, 0.86);
   font-size: 0.9rem;
   font-weight: 800;
+  color: #2f2a24;
 }
 
 .room-floor-badge {
@@ -260,6 +261,14 @@ button {
   pointer-events: none;
 }
 
+.place-overlay.preview-like {
+  background: rgba(0, 160, 80, 0.25);
+}
+
+.place-overlay.preview-dislike {
+  background: rgba(220, 160, 40, 0.3);
+}
+
 .room-cats {
   position: absolute;
   left: 12px;
@@ -315,6 +324,7 @@ button {
 }
 
 .cat-sprite {
+  position: relative;
   display: grid;
   place-items: center;
   width: 54px;
@@ -325,6 +335,38 @@ button {
   color: #2f241d;
   font-weight: 900;
   box-shadow: 0 5px 0 rgba(48, 37, 28, 0.17);
+}
+
+.cat-state-icon {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(67, 45, 30, 0.55);
+  border-radius: 50%;
+  background: #fff8eb;
+}
+
+.cat-state-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.top-actions {
+  display: flex;
+  justify-content: center;
+  padding: 10px 16px 0;
+}
+
+.top-actions button,
+.upgrade-button {
+  border-radius: 8px;
+  background: #5b4636;
+  color: #fff8eb;
+  font-weight: 900;
 }
 
 .cat-sprite img,
@@ -414,6 +456,274 @@ button {
   display: grid;
   align-items: end;
   background: rgba(47, 42, 36, 0.34);
+}
+
+.panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: grid;
+  align-items: end;
+  background: rgba(47, 42, 36, 0.34);
+}
+
+.room-detail-panel,
+.diary-panel {
+  position: relative;
+  width: min(100%, 520px);
+  max-height: min(86vh, 760px);
+  margin: 0 auto;
+  padding: 18px;
+  overflow: auto;
+  border: 3px solid #5f4a37;
+  border-radius: 8px 8px 0 0;
+  background: #fff8eb;
+  box-shadow: 0 -12px 30px rgba(47, 42, 36, 0.24);
+}
+
+.panel-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(91, 70, 54, 0.12);
+}
+
+.room-detail-panel h2,
+.room-detail-panel p,
+.diary-panel h2,
+.diary-panel p {
+  margin: 0;
+}
+
+.room-detail-cats,
+.furniture-grid,
+.diary-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.room-cat-card,
+.furniture-slot,
+.diary-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 62px;
+  padding: 10px;
+  border: 2px solid rgba(83, 64, 48, 0.14);
+  border-radius: 8px;
+  background: #fffdf7;
+  color: #2f2a24;
+  text-align: left;
+}
+
+.room-cat-card span {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.room-cat-card small,
+.furniture-slot small,
+.diary-entry p,
+.diary-counter {
+  color: #756252;
+  font-weight: 800;
+}
+
+.room-cat-card.empty,
+.furniture-slot.empty,
+.diary-entry.locked {
+  color: #756252;
+  background: rgba(255, 253, 247, 0.58);
+}
+
+.status-good {
+  color: #2f8663;
+}
+
+.status-bad {
+  color: #a16a12;
+}
+
+.furniture-slot {
+  justify-content: flex-start;
+}
+
+.furniture-slot img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.furniture-slot:disabled,
+.upgrade-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.upgrade-button {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.diary-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.diary-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.diary-tabs button {
+  border-radius: 8px;
+  background: rgba(91, 70, 54, 0.1);
+  font-weight: 900;
+  text-transform: capitalize;
+}
+
+.diary-tabs button.active {
+  background: #5b4636;
+  color: #fff8eb;
+}
+
+.event-card-stack {
+  position: fixed;
+  right: 14px;
+  bottom: 112px;
+  z-index: 80;
+  display: grid;
+  gap: 10px;
+  width: min(320px, calc(100vw - 28px));
+}
+
+.event-card {
+  position: relative;
+  padding: 14px 48px 14px 14px;
+  border: 3px solid #5f4a37;
+  border-radius: 8px;
+  background: #fff8eb;
+  box-shadow: 0 8px 20px rgba(47, 42, 36, 0.18);
+}
+
+.event-card h3,
+.event-card p {
+  margin: 0;
+}
+
+.event-card button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.offline-summary {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(47, 42, 36, 0.56);
+}
+
+.offline-summary section {
+  width: min(100%, 420px);
+  padding: 22px;
+  border: 3px solid #5f4a37;
+  border-radius: 8px;
+  background: #fff8eb;
+}
+
+.offline-gains {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.offline-gains span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 900;
+}
+
+.offline-summary button {
+  width: 100%;
+  margin-top: 12px;
+  border-radius: 8px;
+  background: #5b4636;
+  color: #fff8eb;
+  font-weight: 900;
+}
+
+.tutorial-card {
+  position: fixed;
+  left: 14px;
+  bottom: 112px;
+  z-index: 85;
+  width: min(320px, calc(100vw - 28px));
+  padding: 14px 48px 14px 14px;
+  border: 3px solid #5f4a37;
+  border-radius: 8px;
+  background: #fff8eb;
+  box-shadow: 0 8px 20px rgba(47, 42, 36, 0.18);
+}
+
+.tutorial-card p {
+  margin: 4px 0 0;
+  font-weight: 800;
+}
+
+.tutorial-card button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border-radius: 8px;
+  background: transparent;
+}
+
+@keyframes tutorial-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 196, 87, 0.7); }
+  70% { box-shadow: 0 0 0 12px rgba(255, 196, 87, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 196, 87, 0); }
+}
+
+body[data-tutorial-step="0"] [data-tutorial-target="miso-card"],
+body[data-tutorial-step="1"] [data-tutorial-target="bedroom-room"],
+body[data-tutorial-step="2"] [data-tutorial-target="comfort-pill"],
+body[data-tutorial-step="3"] [data-tutorial-target="bedroom-room"],
+body[data-tutorial-step="4"] [data-tutorial-target="upgrade-button"] {
+  position: relative;
+  animation: tutorial-pulse 1.6s ease-out infinite;
+  outline: 2px solid #ffc457;
+  border-radius: 8px;
+}
+
+.offline-meta {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  list-style: none;
+  padding: 0;
+}
+
+.offline-meta li {
+  margin: 2px 0;
 }
 
 .cat-info-panel {
@@ -548,7 +858,14 @@ button {
     align-items: center;
   }
 
-  .cat-info-panel {
+  .cat-info-panel,
+  .panel-backdrop {
+    align-items: center;
+  }
+
+  .cat-info-panel,
+  .room-detail-panel,
+  .diary-panel {
     border-radius: 8px;
   }
 }
