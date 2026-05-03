@@ -1,6 +1,6 @@
 import { createInitialState } from './initialState.js';
 
-export const SAVE_KEY = 'catHouseIdle_save';
+export const SAVE_KEY = 'kittyTowerIdle_save';
 
 function mergeById(defaultItems, savedItems) {
   if (!Array.isArray(savedItems)) {

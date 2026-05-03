@@ -1,13 +1,13 @@
-# Cat House Idle — Build Plan
+# Kitty Tower Idle — Build Plan
 
-This plan breaks the implementation of [cat-house-idle-gdd-v4.md](cat-house-idle-gdd-v4.md) into self-contained steps. Each step can be picked up cold by a fresh agent. Steps 1–6 deliver a **Playable MVP** (assign cats → watch resources tick). Steps 7+ layer in depth (states, furniture, events, diary, offline, tutorial).
+This plan breaks the implementation of [kitty-tower-idle-gdd-v4.md](kitty-tower-idle-gdd-v4.md) into self-contained steps. Each step can be picked up cold by a fresh agent. Steps 1–6 deliver a **Playable MVP** (assign cats → watch resources tick). Steps 7+ layer in depth (states, furniture, events, diary, offline, tutorial).
 
 ## How to use this plan
 
 - **Each step is an executable unit.** Read the step, the listed GDD sections, and any files marked under "Inputs". Then implement only what the step describes.
 - **No skipping ahead.** If the step says "stub the diary", do not also build the diary screen. That comes later.
 - **Acceptance criteria are the contract.** A step is done when those bullets pass — not when the code "looks right".
-- **Stack & rules locked in [memory/project_cat_house_idle.md](.claude/projects/-home-niels-van-welzen-projects-tiny-cat-house/memory/project_cat_house_idle.md).** Stack: React + Vite, localStorage save key `catHouseIdle_save`, Lucide React icons, Nunito font, `image-rendering: pixelated` on all game art. No audio, no Garden/Study, no room specialization.
+- **Stack & rules locked in [memory/project_kitty_tower_idle.md](.claude/projects/-home-niels-van-welzen-projects-kitty-tower-idle/memory/project_kitty_tower_idle.md).** Stack: React + Vite, localStorage save key `kittyTowerIdle_save`, Lucide React icons, Nunito font, `image-rendering: pixelated` on all game art. No audio, no Garden/Study, no room specialization.
 - **Always work from the GDD.** When in doubt, the GDD is the source of truth. Memory captures resolved ambiguities — don't re-litigate them.
 - **Don't invent features.** If something isn't in the step or GDD, leave it out.
 
@@ -32,11 +32,11 @@ Goal: a player opens the page, sees a cutaway cat tower with 3 stacked rooms, dr
 4. Create global CSS rule `.pixel-art { image-rendering: pixelated; image-rendering: crisp-edges; }`.
 5. Create the empty asset folder structure under `public/assets/` (so paths resolve at `/assets/...` in dev): `cats/portraits/`, `cats/sprites/`, `cats/full-art/`, `rooms/`, `furniture/`, `ui/`, `audio/`. Drop a `.gitkeep` in each.
 6. Create the `src/` subfolders: `components/`, `hooks/`, `data/`, `store/`. Empty for now.
-7. Replace the default Vite `App.jsx` with a minimal "Cat House Idle" placeholder heading so we can see the font rendering.
+7. Replace the default Vite `App.jsx` with a minimal "Kitty Tower Idle" placeholder heading so we can see the font rendering.
 8. Add a `.gitignore` covering `node_modules/`, `dist/`, `.DS_Store`.
 
 **Acceptance:**
-- `npm run dev` starts; visiting localhost shows "Cat House Idle" in Nunito.
+- `npm run dev` starts; visiting localhost shows "Kitty Tower Idle" in Nunito.
 - Folder structure matches GDD A.12 (under `src/` and `public/assets/`).
 - `.pixel-art` class is defined globally.
 
@@ -69,11 +69,11 @@ Goal: a player opens the page, sees a cutaway cat tower with 3 stacked rooms, dr
 
 **Goal:** A central game state with a defined initial value, save to localStorage, and load on boot. No UI wired up yet — verify via console.
 
-**Inputs:** GDD Section 16.4 (data schema — read carefully, this is the contract), 16.7 (edge cases — missing fields default silently), Section 16.1 (auto-save every 60s + on `visibilitychange`). Memory: schema additions vs v3 (eventCooldowns top-level, stateTransitionDue per cat, roomSessions, relationships as `{score}` only, currentRoom can be null, diary entries as `{id, discoveredAt}`, resources are floats, save key `catHouseIdle_save`).
+**Inputs:** GDD Section 16.4 (data schema — read carefully, this is the contract), 16.7 (edge cases — missing fields default silently), Section 16.1 (auto-save every 60s + on `visibilitychange`). Memory: schema additions vs v3 (eventCooldowns top-level, stateTransitionDue per cat, roomSessions, relationships as `{score}` only, currentRoom can be null, diary entries as `{id, discoveredAt}`, resources are floats, save key `kittyTowerIdle_save`).
 
 **Do:**
 1. **`src/store/initialState.js`** — exports `createInitialState()` returning the starter save object matching Section 16.4. Resources start at `0.0`. `lastTickTimestamp = Date.now()`. All 3 cats present with `currentRoom: null`, `currentState: 'active'`, `stateEnteredAt: Date.now()`, `stateTransitionDue: null`, empty `relationships` map seeded with all other cat ids at `{score: 0}`, empty `roomSessions: {}`. All 3 rooms unlocked at level 1 with `towerFloor` copied from `src/data/rooms.js`, no furniture. Empty `diary.interactions/events/hints`. `diary.catProfiles` seeded with each cat's known like/dislike from the data files. `tutorialStep: 0`. `eventCooldowns: {}`. `offlineEventQueue: []`. `version: 1`.
-2. **`src/store/persistence.js`** — exports `saveGame(state)` (writes JSON to `localStorage['catHouseIdle_save']`) and `loadGame()` (reads, parses, deep-merges over `createInitialState()` so missing fields default silently per Section 16.7; returns the merged state, or fresh state if absent / parse fails).
+2. **`src/store/persistence.js`** — exports `saveGame(state)` (writes JSON to `localStorage['kittyTowerIdle_save']`) and `loadGame()` (reads, parses, deep-merges over `createInitialState()` so missing fields default silently per Section 16.7; returns the merged state, or fresh state if absent / parse fails).
 3. **`src/store/gameState.js`** — exports a React context `GameStateContext` and a `GameStateProvider` component. Provider holds state with `useState`, calls `loadGame()` on mount. Auto-save: a `useEffect` that calls `saveGame(state)` every 60s with `setInterval`, and one that listens to `document.visibilitychange` and saves immediately when the page becomes hidden. Provides `{state, setState}` (or a small action API — your call, but keep it minimal for now).
 4. Wire `<GameStateProvider>` into `App.jsx`. In `App.jsx`, render the current `coins` and `comfort` (as `Math.floor`) just to prove the state plumbing works.
 5. Add a "Reset save" debug button somewhere visible during dev that wipes localStorage and reloads. Helpful while iterating.
@@ -422,7 +422,7 @@ These can land in any order after Phase 2 and don't affect game logic.
 
 **Inputs:** GDD Section 16.1.
 
-**Do:** `npm install @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android`. `npx cap init "Cat House Idle" "com.example.cathouseidle"`. Configure `webDir: 'dist'`. `npm run build && npx cap sync`. Document the platform-add commands (`npx cap add ios` / `add android`) and how to open in Xcode / Android Studio.
+**Do:** `npm install @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android`. `npx cap init "Kitty Tower Idle" "com.example.kittytoweridle"`. Configure `webDir: 'dist'`. `npm run build && npx cap sync`. Document the platform-add commands (`npx cap add ios` / `add android`) and how to open in Xcode / Android Studio.
 
 **Acceptance:** `npx cap sync` succeeds. Documentation lists the build + open commands. Game runs in iOS simulator and Android emulator (verify if you have the toolchains; otherwise just document the steps).
 

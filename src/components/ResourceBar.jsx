@@ -6,7 +6,7 @@ export function ResourceBar() {
 
   return (
     <header className="resource-bar">
-      <h1 className="resource-title">Cat House Idle</h1>
+      <h1 className="resource-title">Kitty Tower Idle</h1>
       <div className="resource-pills" aria-label="Resources">
         <div className="resource-pill coins" aria-label="Coins">
           <Coins aria-hidden="true" />

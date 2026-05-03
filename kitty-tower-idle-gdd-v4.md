@@ -1,4 +1,4 @@
-# Game Design Document — Cat House Idle (v3)
+# Game Design Document — Kitty Tower Idle (v4)
 
 > **Revision notes (v4):** Art direction locked to **painterly HD pixel** style — high-resolution pixel art with large palettes, dithered fur/fabric texture, dark silhouette outlines, and no interior outlines. Section 21 expanded with full style specification. Appendix A updated with technical pixel art specs: resolution, palette rules, anti-aliasing requirements, `image-rendering: pixelated` CSS, animation frame stub, and per-asset production notes.
 >
@@ -10,9 +10,9 @@
 
 ## 1. High Concept
 
-Cat House Idle is a cozy idle management game about caring for a small group of unique cats while gradually building, expanding, and personalizing a warm vertical cat tower.
+Kitty Tower Idle is a cozy idle management game about caring for a small group of unique cats while gradually building, expanding, and personalizing a warm vertical cat tower.
 
-Unlike traditional idle games that focus on collecting hundreds of units or endlessly scaling production numbers, Cat House Idle focuses on a limited cast of memorable cats and a tower that grows floor by floor. Each cat has distinct traits, a clear Like and Dislike that shape how they interact with rooms, and relationships that influence how different rooms perform.
+Unlike traditional idle games that focus on collecting hundreds of units or endlessly scaling production numbers, Kitty Tower Idle focuses on a limited cast of memorable cats and a tower that grows floor by floor. Each cat has distinct traits, a clear Like and Dislike that shape how they interact with rooms, and relationships that influence how different rooms perform.
 
 The player does not directly control the cats. Instead, they shape the environment around them by assigning cats to rooms, upgrading spaces, placing furniture, expanding the house, and discovering how each cat responds to different conditions.
 
@@ -70,7 +70,7 @@ Events should be temporary, understandable, recoverable, and connected to specif
 
 ## 3. Target Player Experience
 
-> "I check in on my cat house, collect rewards, see how my cats used the rooms, make a few building or placement decisions, and leave feeling like the house is still growing while I'm gone."
+> "I check in on my kitty tower, collect rewards, see how my cats used the rooms, make a few building or placement decisions, and leave feeling like the tower is still growing while I'm gone."
 
 **Quick Check-In (30–90 seconds):** Collect idle resources, read 1–3 event cards, make one small upgrade or placement change, and leave.
 
@@ -669,7 +669,7 @@ The game does not rely on `setInterval` accumulating — it always calculates fr
 
 ### 16.4 Data Schema
 
-All game state is stored in a single JSON object under the key `catHouseIdle_save`.
+All game state is stored in a single JSON object under the key `kittyTowerIdle_save`.
 
 ```json
 {
@@ -1416,7 +1416,7 @@ The `/src/data/` files are the most important to get right first. They encode al
 
 When handing this document to Claude Code, include the following prompt alongside it:
 
-> "Here is a Game Design Document for a cozy idle game called Cat House Idle. Please implement the launch scope described in the document: 3 cats (Miso, Bean, Mochi), 3 rooms (Living Room, Kitchen, Bedroom), 2 resources (Coins and Comfort), the Like/Dislike system, the state machine from Section 7.3, the tick system from Section 16.3, the save/load schema from Section 16.4, and the UI layout from Section 16.5. Use React + Vite. Use placeholder assets (colored rectangles or emoji) for all visuals during prototyping. Apply `image-rendering: pixelated` CSS to all game art `<img>` elements so real pixel art can be swapped in later without blurring. Use Lucide React for UI icons. Stub in the animation frame prop system from Appendix A.8. Asset paths should follow the structure in Appendix A.12 so real art can be dropped in later without changing code. Do not implement Garden, Study, or any post-launch content yet."
+> "Here is a Game Design Document for a cozy idle game called Kitty Tower Idle. Please implement the launch scope described in the document: 3 cats (Miso, Bean, Mochi), 3 rooms (Living Room, Kitchen, Bedroom), 2 resources (Coins and Comfort), the Like/Dislike system, the state machine from Section 7.3, the tick system from Section 16.3, the save/load schema from Section 16.4, and the UI layout from Section 16.5. Use React + Vite. Use placeholder assets (colored rectangles or emoji) for all visuals during prototyping. Apply `image-rendering: pixelated` CSS to all game art `<img>` elements so real pixel art can be swapped in later without blurring. Use Lucide React for UI icons. Stub in the animation frame prop system from Appendix A.8. Asset paths should follow the structure in Appendix A.12 so real art can be dropped in later without changing code. Do not implement Garden, Study, or any post-launch content yet."
 
 This scopes the implementation to exactly what is specified and prevents Claude Code from inventing additional features or rooms not yet designed.
 
