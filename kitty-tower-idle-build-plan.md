@@ -428,6 +428,374 @@ These can land in any order after Phase 2 and don't affect game logic.
 
 ---
 
+# PHASE 4 — Polish & juice (Steps 19–24)
+
+These are independent visual / feel upgrades on top of the launch game. Pick any order.
+
+---
+
+## Step 19 — Resource delta toasts
+
+**Goal:** When Coins or Comfort change, a small floating number appears under the corresponding icon and fades upward. Gains in green, losses in red. Production gains debounce/accumulate (since they tick continuously). Spend events (furniture, upgrades) emit immediately.
+
+**Inputs:** existing `runTick` and the spend actions in `src/store/upgrades.js`.
+
+**Do:**
+1. **`src/store/resourceDeltas.js`** — a tiny pub-sub. Exports `subscribe(listener)` returning an unsubscribe fn, and `emit({resource, delta})`. No React, no state — just a `Set` of listeners.
+2. **`src/store/tick.js`** — extend `runTick` to compute the per-tick delta for `coins` and `comfort` after production. Accumulate gains into a per-resource bucket on the provider; flush a single `emit({resource, delta: floor(bucket)})` per resource each ~1s when `bucket >= 0.5`. Floor before emit; carry the fractional remainder.
+3. **`src/store/upgrades.js`** — on a successful `purchaseFurniture` / `upgradeRoom`, synchronously emit `{resource: 'coins', delta: -cost.coins}` and `{resource: 'comfort', delta: -cost.comfort}`. Skip on failure (return null path).
+4. **`src/components/ResourceDeltaToast.jsx`** — listens via `useEffect(() => subscribe(...))`, holds a queue `[{id, resource, delta}]`. Each toast renders absolutely-positioned next to the matching icon: `+3` in green (`#3a9d3a`), `-270` in red (`#c44`). CSS animation lifts ~30px and fades over 1.2s; remove from queue on `animationend`.
+5. Mount the toast layer inside `ResourceBar` so toasts sit under the right icon.
+6. Cap visible toasts at ~5 per resource — drop oldest when over.
+
+**Acceptance:**
+- Mochi alone in Kitchen → green `+1`s float up under Coins every ~1s.
+- Buying Heated Blanket → red `-270` and `-30` appear under Coins and Comfort immediately.
+- Toasts always fade and clear; queue never grows unbounded.
+- Multiple toasts stack vertically without obscuring the icon.
+- The pub-sub is not in save state.
+
+---
+
+## Step 20 — Tile-grid tower layout (visual only)
+
+**Goal:** The tower renders on a fixed 10-tile-wide grid. Kitchen = 4 tiles, Living Room = 6 tiles, Bedroom = 4 tiles. Rooms sit at proportional pixel widths inside a centered tower frame. **Pure visual** — capacity, production, drag-drop, all GDD numbers unchanged.
+
+**Inputs:** GDD A.4 (room style notes), Section 16.5 (UI layout), GDD Section 10 (capacity numbers — must remain authoritative).
+
+**Do:**
+1. **`src/data/rooms.js`** — add per-room `widthTiles` (kitchen 4, living_room 6, bedroom 4) and `alignment` ('left' | 'center' | 'right' — pick what reads best per floor). Add module-level constants `TOWER_TILES = 10` and `TILE_PX = 32` (or whatever pixel size matches your sprite scale). Do **not** touch `baseCapacity` or `maxCapacity`.
+2. **`src/components/Diorama.jsx`** — wrap the floors in a `.tower-frame` element of fixed pixel width = `TOWER_TILES * TILE_PX`, centered horizontally. Each `RoomView` renders inside this frame.
+3. **`src/components/RoomView.jsx`** — set inline `width: room.widthTiles * TILE_PX`. Apply alignment via margin (`marginLeft: 'auto'` / `0` / centered) based on `room.alignment`. Keep the room background image / placeholder color bound to the room's actual width — narrower rooms look smaller on the floor.
+4. Drag preview tints, capacity overlays, drop targets, cat sprites all continue to work at the room's new width — no logic changes, the elements just span fewer pixels.
+5. **Mobile scaling:** at <640px the `.tower-frame` should fit the viewport without distorting tile proportions. Use `max-width: 100%` plus a CSS `transform: scale(...)` calculated against viewport width, or set `TILE_PX` responsively via a CSS variable.
+6. **Dev guides (optional, off by default):** behind a dev flag, render faint 1px vertical lines per tile behind the rooms to verify alignment.
+
+**Acceptance:**
+- Tower visibly 10 tiles wide. Bedroom and Kitchen render at 4-tile width; Living Room at 6.
+- Alignment is consistent and intentional (e.g. Kitchen left, Living Room center, Bedroom right — your call).
+- All Phase 1–3 mechanics still work: drag-drop, capacity caps, preview tints, cat sprites, Like/Dislike, events.
+- Mobile scales the whole tower frame to fit; tile proportions preserved.
+- GDD capacity numbers remain authoritative — room width is decoration only.
+
+---
+
+## Step 21 — Particle effects
+
+**Goal:** Tiny ambient particles attached to cat sprites based on state. Z's drift up from Sleeping cats, hearts from Cuddly, sparks from Focused, dust puffs from Grumpy. Pure visual.
+
+**Inputs:** GDD Section 7.3 (states), Appendix A.6 (state icons — particles complement icons, do not replace them).
+
+**Do:**
+1. **`src/data/states.js`** — add `STATE_PARTICLES` mapping state id → `{glyph: string, count: number, color: string} | null`. Sleeping → Z's, Cuddly → hearts, Focused → sparks, Grumpy → dust, others → null.
+2. **`src/components/CatParticles.jsx`** — props `state`. Reads the config; renders 0–3 absolutely-positioned spans with staggered CSS keyframe `floatUp` animations (`translateY(-20px)` + fade, 2s loop, `animation-delay: 0s, 0.6s, 1.2s`).
+3. Wire into `CatSprite.jsx` — render `<CatParticles state={state} />` as an overlay above the sprite.
+4. CSS only — no JS animation loop. Performance must hold for 6+ cats on screen.
+5. Respect `@media (prefers-reduced-motion: reduce)` — disable all particle animations.
+
+**Acceptance:**
+- Sleeping cat shows drifting Z's.
+- Cuddly cat shows hearts; Grumpy shows dust.
+- Reduced-motion setting disables animations.
+- Toggling state (e.g. transition to Sleeping) swaps particles within one render.
+
+---
+
+## Step 22 — Idle micro-animations
+
+**Goal:** Cats subtly breathe, tail-flick, blink — small cyclic motion so static sprites feel alive. No state-driven sprite swaps yet.
+
+**Inputs:** GDD A.8 (animation frame stub from Step 16).
+
+**Do:**
+1. **`src/hooks/useIdleFrame.js`** — returns a 0/1 frame value toggling every ~600ms via `setInterval`. Single shared interval at the provider level (don't run one per cat).
+2. Pass `frame={idleFrame}` into `<CatSprite>` from `RoomView`. The Step 16 sprite-sheet helper already handles frame offset; multi-frame PNGs animate automatically with no further code.
+3. Add CSS `@keyframes breathe` (1px scaleY 1.0 ↔ 0.98, 3s loop) on `.cat-sprite` so even single-frame cats have ambient motion.
+4. Respect `prefers-reduced-motion`.
+5. Do not store `frame` in save.
+
+**Acceptance:**
+- All cats subtly breathe.
+- Replacing a cat's PNG with a 2-frame sprite sheet starts looping with no code change.
+- Reduced-motion disables the breathe animation.
+
+---
+
+## Step 23 — Day/night cycle
+
+**Goal:** The tower exterior (sky background, optional warm/cool tinting on rooms) shifts based on real-world time. Pure visual.
+
+**Inputs:** GDD A.4 (atmosphere notes).
+
+**Do:**
+1. **`src/hooks/useTimeOfDay.js`** — returns `'dawn' | 'day' | 'dusk' | 'night'` based on `new Date().getHours()` (e.g. 5–7 dawn, 7–17 day, 17–19 dusk, 19–5 night). Re-evaluate every minute via `setInterval`.
+2. Define 4 background gradients in CSS as variables (`--sky-dawn`, etc.) on `:root`. Add 4 phase classes that bind `--current-sky` to the matching variable.
+3. Wrap the diorama in a `.tower-bg` element receiving the phase class. CSS `transition: background 30s ease` for gradual shifts.
+4. Optional subtle interior tint via a low-opacity overlay per phase. Keep restrained — don't fight pixel-art readability.
+5. Do not store time-of-day in save (always derived).
+
+**Acceptance:**
+- Loading at noon shows day sky; loading at 22:00 shows night sky.
+- Transitions smooth; no hard cut.
+- Toggling the system clock during dev cycles the sky correctly.
+
+---
+
+## Step 24 — Settings screen + audio
+
+**Goal:** A settings modal accessible from the main UI with: master mute toggle, notifications toggle, reset save (with confirmation), version info. SFX system plays sounds on coin gain (debounced) and event fire, plus an optional soft BGM loop.
+
+**Inputs:** GDD Section 16.1 (audio called out as post-launch — this is post-launch), Section 16.7 (reset path).
+
+**Do:**
+1. **`public/assets/audio/`** — drop in `coin.ogg`, `event.ogg`, `bgm.ogg`. Tiny placeholder files are fine until real audio lands. Add `.gitkeep` if assets are absent.
+2. **`src/store/audio.js`** — singleton with `playSfx(name)`, `startBgm()`, `stopBgm()`, `setMuted(bool)`. One shared `Audio` element per SFX, preloaded. Respects mute flag.
+3. Save schema: add `settings: {muted: false, notificationsEnabled: false, bgmEnabled: false}`. Default values; deep-merge per Section 16.7.
+4. Wire into emitters: subscribe to `resourceDeltas` (Step 19) and play `coin.ogg` debounced to once per ~3s on positive deltas; on event fire (Step 10) play `event.ogg`.
+5. **`src/components/SettingsModal.jsx`** — opened from a Lucide `Settings` icon in the main UI. Toggles for Mute, BGM, Enable Notifications, Reset Save (button → confirm dialog → wipe `localStorage` + reload). Show app version from `package.json` (read at build via Vite).
+6. Auto-pause BGM on `visibilitychange` hidden; resume on visible. Stop on mute.
+
+**Acceptance:**
+- Settings icon opens the modal; toggling Mute silences SFX and BGM immediately.
+- Reset Save shows a confirmation prompt, then wipes and reloads on confirm.
+- Mute persists across reload.
+- Tabbing out pauses BGM; tabbing in resumes (when not muted).
+
+---
+
+# PHASE 5 — Engagement systems (Steps 25–28)
+
+Retention loops on top of the core game.
+
+---
+
+## Step 25 — Achievements / milestones
+
+**Goal:** A list of unlockable milestones (e.g. "First Bonded pair", "Earn 1000 lifetime Coins", "Discover 5 events"). Unlocking shows a toast and adds to a new tab in the diary.
+
+**Inputs:** Step 11 diary unlock pattern is the template.
+
+**Do:**
+1. **`src/data/achievements.js`** — array of `{id, title, description, icon, condition: (state) => bool}`. ~12 launch achievements. Conditions are pure functions of state.
+2. Save schema: `achievements: {unlocked: [{id, unlockedAt}]}`. Plus lifetime counters: `lifetime: {coinsEarned: 0, comfortEarned: 0, eventsFired: 0, catSessions: 0, ...}`. Update lifetime counters in `runTick` and `processEvents` — additive, never decrement.
+3. **`src/store/achievements.js`** — `processAchievements(state, nowMs) → {newState, newlyUnlocked: []}`. Called from `runTick` after production. For each not-yet-unlocked achievement, run `condition(state)`; on hit, append to `unlocked`.
+4. New tab in `CatDiary.jsx` ("Achievements"). Same locked-silhouette pattern as existing tabs. Counter banner on the tab once first unlock lands.
+5. Wire `newlyUnlocked` into a toast layer (reuse the deltas pattern, or add `<AchievementToast>`).
+
+**Acceptance:**
+- Earning 1000 lifetime Coins unlocks "Tycoon"; toast appears.
+- Unlocked achievements persist across reload.
+- Diary tab lists locked + unlocked, with counter.
+- Lifetime counters never decrease (test by triggering offline simulation).
+
+---
+
+## Step 26 — Daily login streak
+
+**Goal:** First load each calendar day grants a small bonus (escalating with streak). Streak resets if a calendar day is missed entirely.
+
+**Do:**
+1. Save schema: `dailyLogin: {lastClaimedDate: 'YYYY-MM-DD' | null, currentStreak: 0}`.
+2. On `GameStateProvider` mount — after offline simulation completes — compare today's local date string vs `lastClaimedDate`:
+   - Same day: skip.
+   - Date is `lastClaimedDate + 1`: increment streak, grant bonus matching new streak day.
+   - Gap of 2+ days: reset streak to 1, grant day-1 bonus.
+3. **`src/data/dailyLogin.js`** — bonus table: day 1 = 50 Coins, day 2 = 100, day 3 = 200, day 5 = 500, day 7+ = 1000 (cap).
+4. **`src/components/DailyLoginToast.jsx`** — small overlay shown on claim with streak number and reward amount. Auto-dismiss after 4s or on tap.
+5. Use `Intl.DateTimeFormat` or `toLocaleDateString('en-CA')` for the YYYY-MM-DD format — avoid timezone subtleties.
+
+**Acceptance:**
+- First load of the day grants and shows the bonus.
+- Same-day reload doesn't re-grant.
+- Skipping a day resets streak to 1 on next claim.
+- Streak persists across reload and survives offline simulation.
+
+---
+
+## Step 27 — Stats screen
+
+**Goal:** A "Stats" screen showing lifetime numbers — total Coins earned, total Comfort earned, total events fired, longest single nap, most-paired cat (highest sum of relationship scores), etc.
+
+**Do:**
+1. Lifetime counters from Step 25 cover resources + events. Extend save: `stats: {longestNapMs: 0, totalCatSessions: 0, eventsByType: {}, ...}`.
+2. Update tick + state-transition logic to record stats. When a cat exits Sleeping, compute session duration vs `longestNapMs` and update.
+3. **`src/components/StatsScreen.jsx`** — full-screen list, grouped by category (Resources / Cats / Events / Time). Read-only.
+4. Wire to a "Stats" entry in the main menu or a tab in the diary.
+
+**Acceptance:**
+- All listed stats visible and accurate after a few minutes of play.
+- Stats persist; never decrease.
+- Offline simulation correctly increments lifetime counters.
+
+---
+
+## Step 28 — Push notifications via Capacitor
+
+**Goal:** When the app is backgrounded, native push notifications fire on rare events or after the offline cap nears. iOS/Android only — web is no-op.
+
+**Inputs:** `@capacitor/local-notifications` plugin, GDD Section 13 (rare events).
+
+**Do:**
+1. `npm install @capacitor/local-notifications`. `npx cap sync`.
+2. **`src/store/notifications.js`** — wraps `LocalNotifications.schedule(...)`. Detects platform via `Capacitor.getPlatform()`; web is a no-op. Respects `state.settings.notificationsEnabled` from Step 24.
+3. On `visibilitychange` to hidden, schedule a notification at `now + offlineCap/2` saying "Your cats might have a story to tell..." (generic — we don't know what'll happen offline).
+4. On rare event fire (`event.isRare`) while app is in background: schedule an immediate notification with the event title.
+5. Settings toggle (Step 24) requests OS permission on enable; gracefully handles denial.
+
+**Acceptance:**
+- Built iOS/Android: enabling notifications + backgrounding the app schedules one.
+- Web: silently no-ops; no console errors.
+- Disabling in settings stops all future scheduling.
+- Cancel scheduled notifications on app foreground (cleanup).
+
+---
+
+# PHASE 6 — Content expansion (Steps 29–31)
+
+New cats, rooms, and furniture. Each expansion is independent; build the ones you want.
+
+---
+
+## Step 29 — Cats 4–6
+
+**Goal:** Add the 3 placeholder cats from the GDD as fully-defined data, with unlock conditions tied to player progress.
+
+**Inputs:** GDD Section 17 (cat catalog) — placeholder names/traits become real definitions.
+
+**Do:**
+1. Extend `src/data/cats.js` with 3 new entries. Each: `id`, `name`, `traits`, `like`, `dislike`, `favoriteFurniture`, `role`, `flavorText`, plus `unlockCondition: {type: 'coins'|'comfort'|'achievement'|'roomLevel', threshold: number | string}`.
+2. Update `src/store/initialState.js` so launch cats start `unlocked: true`, new cats start `unlocked: false`.
+3. **`src/store/catUnlock.js`** — `processCatUnlocks(state) → {newState, newlyUnlocked: []}`. Called per tick. When a condition is met, set `cat.unlocked = true`.
+4. `CatRoster` and `CatRosterScreen` filter to `unlocked === true`. Locked cats appear in `CatRosterScreen` as silhouettes with their unlock hint.
+5. Newly unlocked cats fire a toast + a diary "Cat" entry.
+6. Verify all event/relationship/synergy logic still works for new cats (matching is id-driven; should "just work" if the data is shaped correctly).
+
+**Acceptance:**
+- Reaching the unlock threshold for cat 4 makes them appear in the roster.
+- Locked cats render as silhouettes with hint text.
+- Unlock state and unlock timestamp persist.
+- New cats integrate with events, relationships, diary without special cases.
+
+---
+
+## Step 30 — New rooms (Garden, Study)
+
+**Goal:** Add 2 new rooms from the GDD. Each unlocks at a Coin or Comfort threshold and adds a new floor to the tower.
+
+**Inputs:** GDD Section 8 (rooms) — pull whatever the GDD defines.
+
+**Do:**
+1. Extend `src/data/rooms.js`: `garden` (suggest `towerFloor: 0` ground level, `widthTiles: 6`, `alignment: 'center'`) and `study` (`towerFloor: 4` above bedroom, `widthTiles: 4`). Define `baseRates`, `baseCapacity`, `maxCapacity`, `furnitureSlots`. Add `unlockCondition: {type, threshold}`.
+2. Add 4–6 new furniture items in `src/data/furniture.js` for the new rooms (per GDD 6.3 if defined; otherwise design analogous to existing rooms).
+3. New rooms locked by default in `initialState.js`: `room.unlocked = false`. Launch rooms `unlocked: true`.
+4. **`src/store/roomUnlock.js`** — same pattern as cat unlock. When threshold met, `room.unlocked = true`. `Diorama` filters to unlocked rooms.
+5. Most existing event/relationship logic is room-id-driven and should "just work". Verify production formulas in Section 6.2 cover the new rooms or extend the table.
+
+**Acceptance:**
+- Reaching the Coin threshold reveals Garden as a new floor.
+- Cats can be assigned; production calculates correctly.
+- Reload preserves unlock + assignments.
+- Tile-grid layout (Step 20) handles the new room widths cleanly.
+
+---
+
+## Step 31 — Furniture variants / skins
+
+**Goal:** Each furniture item supports 1+ visual variants with the same mechanical effect. Cosmetic only.
+
+**Do:**
+1. Extend `src/data/furniture.js`: `variants: [{id, name, sprite, unlockCondition?}]` per item. Default variant always unlocked.
+2. Save schema: `room.furniture[i].variantId`. Defaults to first variant on purchase.
+3. In `RoomDetailPanel`, on a placed furniture item, add a "Change variant" affordance → small picker showing all unlocked variants. Free swap.
+4. Variants unlock via achievements (Step 25): unlocking achievement X grants variant Y for furniture Z. Track in `state.unlockedVariants: [{furnitureId, variantId, unlockedAt}]`.
+5. `FurnitureSlot.jsx` reads variant sprite path instead of base sprite.
+
+**Acceptance:**
+- Default purchase shows variant 1.
+- Unlocking an achievement that grants a variant makes it selectable in the picker.
+- Swapping is free and reflected immediately.
+- Variant choice persists.
+
+---
+
+# PHASE 7 — Late game & infrastructure (Steps 32–34)
+
+Bigger lifts. Cloud save needs a backend; prestige is a meaningful design change.
+
+---
+
+## Step 32 — Cloud save
+
+**Goal:** Optional account-bound save sync so progress moves across devices. Anonymous accounts (locally generated UUID, no email).
+
+**Inputs:** requires a hosted endpoint — backend implementation is **out of plan scope**. Recommended: Cloudflare Workers + KV, or a tiny Express/Hono server. Endpoint contract: `POST /save { userId, save }`, `GET /save/:userId → { save }`.
+
+**Do:**
+1. **`src/store/cloudSave.js`** — wraps `fetch` against `import.meta.env.VITE_CLOUD_SAVE_URL`. Functions: `pushSave(userId, save)`, `pullSave(userId) → save | null`.
+2. Save schema: `cloudSync: {enabled: false, userId: null, lastSyncedAt: null}`. On enable in settings, generate a UUID (`crypto.randomUUID()`), push current save, set `enabled = true`.
+3. On boot — after offline simulation — if `cloudSync.enabled`, call `pullSave`. If remote `lastTickTimestamp > local.lastTickTimestamp + 5min`, prompt the user with a blocking modal: "Cloud save is newer (from <device/time>) — load it? [Load Cloud] [Keep Local]".
+4. Auto-push on the existing 60s save interval if cloud sync enabled. Debounce so we don't push unchanged state.
+5. Document the backend contract in README.md.
+6. Handle network failures gracefully — never block local play on a failed sync.
+
+**Acceptance:**
+- Toggling sync uploads current save.
+- Loading on a second device with the same UUID restores progress.
+- Conflict prompt fires when remote is meaningfully ahead.
+- Disabling sync = pure local behavior; no network calls.
+- Network outage doesn't break local saves.
+
+---
+
+## Step 33 — Photo mode
+
+**Goal:** A "screenshot" button that hides UI, captures the diorama as a PNG, and prompts the OS share sheet (Capacitor) or downloads (web).
+
+**Inputs:** `html-to-image` for rasterization, `@capacitor/share` for native share.
+
+**Do:**
+1. `npm install html-to-image @capacitor/share`. `npx cap sync`.
+2. **`src/components/PhotoMode.jsx`** — full-screen overlay activated by a Lucide `Camera` button. Sets a `photoMode` UI flag (local React state, not save) that hides `ResourceBar`, `CatRoster`, debug-row, tab bar.
+3. On capture: `htmlToImage.toPng(dioramaRef.current)`. Web: trigger `<a download>` of the data URL. Capacitor: invoke `Share.share({url: dataUrl, ...})`.
+4. Render a small "Kitty Tower Idle" watermark in the corner during photo mode.
+5. Tick continues during photo mode; just hide UI. Optional: pause idle/particle animations briefly for a clean shot.
+
+**Acceptance:**
+- Button hides UI; clean diorama view exposed.
+- Capture produces a PNG containing tower + cats + watermark.
+- Web downloads the file; iOS/Android opens share sheet.
+- Exit returns to normal UI.
+
+---
+
+## Step 34 — Prestige reset
+
+**Goal:** Late-game button that resets progress in exchange for a permanent multiplier. Standard idle-game endgame loop.
+
+**Inputs:** GDD Section 6 if it discusses prestige; otherwise design fresh.
+
+**Do:**
+1. Save schema: `prestige: {level: 0, totalRenovations: 0, lastRenovatedAt: null}`. Lifetime counters from Step 25 are not reset by prestige.
+2. Unlock condition: lifetime coins ≥ 100,000 (tune later). Below threshold, no Renovate button. At threshold, "Renovate" appears in settings or its own screen.
+3. **Renovate flow:** confirmation modal explaining what's lost (current resources, room levels, furniture, cat assignments, relationships, diary discoveries) and what's kept (prestige level + multiplier, achievements, cat unlocks, lifetime stats, room unlocks). On confirm: increment `prestige.level`, reset relevant state to fresh values.
+4. **Multiplier:** `1 + prestige.level * 0.10`. Apply in `calculateCatOutput` **after** the ×2.5 cap (so the cap is on per-cat multipliers; prestige is a global outer scale). Document this clearly in production.js.
+5. New diary tab "Renovations" lists each prestige with timestamp.
+
+**Acceptance:**
+- Below threshold: no Renovate button visible.
+- Confirming Renovate: state resets; prestige level increments; production rates clearly higher post-reset.
+- Achievements + cat unlocks + room unlocks survive.
+- Multiple renovations stack the multiplier (`level: 2 → ×1.20` etc.).
+- Reload after renovation preserves the new level + multiplier.
+
+---
+
 ## Out of scope (post-launch, do not build)
 
-Per memory and GDD: Garden, Study, Bathroom, Hallway, Porch, Sunroom, Playroom, Library Nook. Cats 4–6. Room specialization paths. Audio. Per-state cat sprite variants. Idle animations. Any of the placeholder rooms/cats marked `[PLACEHOLDER]` in the GDD.
+These remain explicitly out of scope even after Phases 4–7:
+
+- Bathroom, Hallway, Porch, Sunroom, Playroom, Library Nook (secondary rooms beyond Garden / Study).
+- Room specialization paths.
+- Per-state cat sprite variants (idle micro-animations in Step 22 use single-frame breathing; richer per-state poses are beyond launch).
+- Any room or cat marked `[PLACEHOLDER]` in the GDD that isn't promoted to real content via Steps 29–30.
+- Multiplayer / shared towers.
