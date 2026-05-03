@@ -47,6 +47,14 @@ describe('cat room actions', () => {
     expect(result).toEqual({ state, ok: false, reason: 'Room is full' });
   });
 
+  it('rejects an assignment for an unknown cat without changing state', () => {
+    const state = createInitialState();
+
+    const result = assignCat(state, 'not-a-cat', 'bedroom');
+
+    expect(result).toEqual({ state, ok: false, reason: 'Cat not found' });
+  });
+
   it('unassigns a cat and refreshes state timing', () => {
     const nowMs = 1_700_000_005_000;
     const state = {

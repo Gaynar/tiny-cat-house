@@ -15,7 +15,10 @@ function mergeById(defaultItems, savedItems) {
 
 function deepMerge(defaultValue, savedValue) {
   if (Array.isArray(defaultValue)) {
-    if (defaultValue.every((item) => item && typeof item === 'object' && 'id' in item)) {
+    if (
+      defaultValue.length > 0 &&
+      defaultValue.every((item) => item && typeof item === 'object' && 'id' in item)
+    ) {
       return mergeById(defaultValue, savedValue);
     }
 

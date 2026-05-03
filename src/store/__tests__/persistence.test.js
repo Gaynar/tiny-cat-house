@@ -76,6 +76,24 @@ describe('persistence', () => {
     expect(state.rooms.find((room) => room.id === 'kitchen').level).toBe(2);
   });
 
+  it('replaces saved non-id arrays while preserving default arrays when saved data is malformed', () => {
+    localStorage.getItem.mockReturnValue(
+      JSON.stringify({
+        diary: {
+          interactions: [{ id: 'first-pet', catId: 'miso' }],
+          events: 'not-an-array',
+        },
+        offlineEventQueue: [{ id: 'queued-event' }],
+      }),
+    );
+
+    const state = loadGame();
+
+    expect(state.diary.interactions).toEqual([{ id: 'first-pet', catId: 'miso' }]);
+    expect(state.diary.events).toEqual([]);
+    expect(state.offlineEventQueue).toEqual([{ id: 'queued-event' }]);
+  });
+
   it('falls back to a fresh state when saved JSON is invalid', () => {
     localStorage.getItem.mockReturnValue('not-json');
 

@@ -17,6 +17,10 @@ export function roomCapacity(roomOrId, state) {
 }
 
 export function assignCat(state, catId, roomId, nowMs = Date.now()) {
+  if (!state.cats.some((cat) => cat.id === catId)) {
+    return { state, ok: false, reason: 'Cat not found' };
+  }
+
   const capacity = roomCapacity(roomId, state);
   if (catsInRoom(state, roomId).length >= capacity) {
     return { state, ok: false, reason: 'Room is full' };

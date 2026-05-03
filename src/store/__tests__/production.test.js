@@ -31,6 +31,18 @@ describe('production calculations', () => {
     });
   });
 
+  it('uses Bean company base rates and like multiplier when not alone', () => {
+    const room = findRoom('living_room');
+    const bean = findCat('bean');
+    const mochi = findCat('mochi');
+
+    expect(isLikeActive(bean, room, [bean, mochi])).toBe(true);
+    expect(calculateCatOutput(bean, room, [bean, mochi])).toEqual({
+      coins: room.baseRates.bean_with_company.coins * LIKE_MULT,
+      comfort: room.baseRates.bean_with_company.comfort * LIKE_MULT,
+    });
+  });
+
   it('applies crowded-room dislike before like bonuses', () => {
     const room = findRoom('living_room');
     const miso = findCat('miso');
@@ -54,5 +66,9 @@ describe('production calculations', () => {
 
     expect(calculateRoomOutput(state, 'living_room').coins).toBeCloseTo(0.42 + 1.05);
     expect(calculateRoomOutput(state, 'living_room').comfort).toBeCloseTo(0.24 + 1.2);
+  });
+
+  it('returns zero output for an empty room', () => {
+    expect(calculateRoomOutput({ cats: [] }, 'bedroom')).toEqual({ coins: 0, comfort: 0 });
   });
 });

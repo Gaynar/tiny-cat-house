@@ -42,4 +42,28 @@ describe('runTick', () => {
     expect(result.state.lastTickTimestamp).toBe(startMs - 30_000);
     expect(result.state.resources).toEqual(state.resources);
   });
+
+  it('preserves unrelated state values while replacing the resources object', () => {
+    const startMs = 1_700_000_000_000;
+    const initialState = createInitialState();
+    const cats = initialState.cats;
+    const rooms = initialState.rooms;
+    const state = {
+      ...initialState,
+      lastTickTimestamp: startMs,
+      lastEventCheckAt: startMs,
+      resources: { coins: 10, comfort: 5 },
+      settings: { soundEnabled: true },
+    };
+
+    const result = runTick(state, startMs + 60_000);
+
+    expect(result.state).toMatchObject({
+      version: 1,
+      settings: { soundEnabled: true },
+    });
+    expect(result.state.cats).toEqual(cats);
+    expect(result.state.rooms).toBe(rooms);
+    expect(result.state.resources).not.toBe(state.resources);
+  });
 });

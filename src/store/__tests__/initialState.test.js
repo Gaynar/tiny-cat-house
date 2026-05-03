@@ -44,4 +44,24 @@ describe('createInitialState', () => {
       bedroom: 0,
     });
   });
+
+  it('creates discovered diary profiles for every cat without self relationships', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+
+    const state = createInitialState();
+
+    expect(Object.keys(state.diary.catProfiles).sort()).toEqual(cats.map((cat) => cat.id).sort());
+    expect(state.diary.interactions).toEqual([]);
+    expect(state.diary.events).toEqual([]);
+    expect(state.diary.hints).toEqual([]);
+
+    state.cats.forEach((cat) => {
+      expect(cat.relationships).not.toHaveProperty(cat.id);
+      expect(state.diary.catProfiles[cat.id]).toMatchObject({
+        like: cat.like,
+        dislike: cat.dislike,
+        discovered: true,
+      });
+    });
+  });
 });
