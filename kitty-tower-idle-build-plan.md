@@ -461,13 +461,147 @@ These are independent visual / feel upgrades on top of the launch game. Pick any
 
 ---
 
-## Step 20 — Tile-grid tower layout (visual only)
+## Step 20 — Build mode machinery (dark-flagged)
 
-**Status:** **Shelved.** The visual tile-grid (per-room widths, alignment within a fixed-width tower frame) requires player-driven placement to be coherent. Per-floor alignment was originally specified as authored by us ("pick what reads best per floor"), but layout positioning belongs to the player, not the room type — hard-coding alignment now would just create throwaway data when build mode lands. The visual layout work and the build-mode UI ship together as a single later step.
+**Goal:** Ship the full build-mode infrastructure — grid renderer, save schema (`version: 2`), layout helpers, build actions, UI components — behind a build-time feature flag (`VITE_BUILD_MODE_UI`). The flag is `false` in production; the hammer icon is invisible to players. All machinery is exercised in dev builds and via `?buildMode=1`. Step 25 flips the flag to `true` when room-unlock content fills the inventory and the feature has real player affordances.
 
-**Until then:** Rooms continue to render at their current full-width layout. No `widthTiles`, no `alignment`, no `TOWER_TILES` / `TILE_PX` constants get added to `src/data/rooms.js` or anywhere else. GDD Section 10 capacity numbers are unchanged.
+**Inputs:** GDD Section 9.1.2 (build-mode contract), 16.4 (`tower` schema, version 2), 16.5 (Build Mode Screen State), 16.7 (build-mode edge cases).
 
-**Future build-mode step (TBD, not yet specified):** Will introduce a save-state-backed tower layout (e.g. `[{floor, roomId, xOffset}]` entries owned by the player), per-room `widthTiles`, a buy-floors / buy-rooms / move-rooms / inventory UI, and the centered `.tower-frame` rendering. Needs its own GDD section (see GDD §9.1.2 placeholder) and its own grilling pass before implementation.
+**Design decisions locked in for this step:**
+- No `Buy Room` action — rooms enter inventory via cat-threshold unlocks (Step 25). Toolbar shows Buy Floor, Inventory, Store, Cancel, Confirm Changes, Exit only.
+- Floor purchase is gated by Coins/Comfort only; no secondary room-level or unlock-count gates. Hard ceiling: `TOWER_MAX_FLOOR = 12`.
+- Floor cost ramp: pure ×1.7 each step from floor 4, rounded each step from the rounded previous to nearest 50 Coins / 25 Comfort (base: 1800 Coins / 250 Comfort for floor 4).
+- `TOWER_GRID_WIDTH = 6` is a compile-time constant, never stored in save.
+- Starter rooms snap to `defaultWidthTiles` at `x=0` on migration from v1 (Kitchen 4, Living Room 6, Bedroom 5). This is a one-time visual re-anchor for existing saves.
+- `rooms[]` stays type-keyed for level/furniture; `tower.builtRooms` owns layout only. `cat.currentRoom = roomTypeId` stays unchanged. A multi-instance migration is deferred until multiple same-type rooms are needed.
+- Cancel = abort live drag only; no per-action undo. Discard resets the whole draft.
+- Mobile inventory interaction: tap-to-select-from-sheet → tap-to-place on floor. Drag-from-inventory is not implemented.
+- Capacity-drop validator is not implemented (no Step-20 action changes capacity; add when resize ships).
+- `buildModeUnlocked` defaults to `true`; tutorial-based unlock is a later step.
+
+**Do:**
+1. **Data additions in `src/data/rooms.js`:**
+   - Add to each room type: `defaultWidthTiles`, `minWidthTiles`, `maxWidthTiles`, `defaultLayout`.
+   - Launch room defaults:
+     - Kitchen: `defaultWidthTiles: 4`, `defaultLayout: {floor: 1, x: 0, widthTiles: 4}`
+     - Living Room: `defaultWidthTiles: 6`, `defaultLayout: {floor: 2, x: 0, widthTiles: 6}`
+     - Bedroom: `defaultWidthTiles: 5`, `defaultLayout: {floor: 3, x: 0, widthTiles: 5}`
+     - Garden: `defaultWidthTiles: 6`, `defaultLayout: {floor: null, x: 0, widthTiles: 6}` (no floor until placed)
+     - Study: `defaultWidthTiles: 3`, `defaultLayout: {floor: null, x: 0, widthTiles: 3}`
+
+2. **Constants in `src/data/tower.js`:**
+   ```js
+   export const TOWER_GRID_WIDTH = 6;
+   export const STARTER_MAX_FLOOR = 3;
+   export const TOWER_MAX_FLOOR = 12;
+   export const FLOOR_BASE_COST = { coins: 1800, comfort: 250 };
+   export const FLOOR_COST_MULTIPLIER = 1.7;
+   ```
+
+3. **Save schema and migration in `src/store/save.js`:**
+   - `createInitialState()` produces `version: 2` with:
+     ```js
+     tower: {
+       maxBuiltFloor: 3,
+       builtRooms: [
+         { roomInstanceId: 'room_kitchen_001', roomTypeId: 'kitchen', floor: 1, x: 0, widthTiles: 4 },
+         { roomInstanceId: 'room_living_room_001', roomTypeId: 'living_room', floor: 2, x: 0, widthTiles: 6 },
+         { roomInstanceId: 'room_bedroom_001', roomTypeId: 'bedroom', floor: 3, x: 0, widthTiles: 5 }
+       ],
+       inventory: [],
+       buildModeUnlocked: true
+     }
+     ```
+   - Add `migrate(state) → state` dispatching on `state.version`:
+     - `migrate1to2(state)`: if `state.tower` is missing, call `createStarterTower(state.rooms)` to produce `tower` at default widths; set `version: 2`. If `state.tower` is already present but has `gridWidthTiles`, drop that field and set `version: 2`.
+   - `loadGame()` order: raw parse → `migrate(state)` → `repairTowerLayout(state)` → render.
+   - Keep existing `rooms[]` for level/furniture/unlocked in this step. `tower.builtRooms` owns layout only.
+   - Cat assignment remains `cat.currentRoom = roomTypeId` in this step. Add a comment at every assignment lookup site: `// TODO: migrate to roomInstanceId when multiple same-type rooms are allowed`.
+
+4. **Layout helpers in `src/store/towerLayout.js`:**
+   - `createStarterTower(rooms) → tower`: builds the default 3-room tower from room type defaults.
+   - `validateTowerLayout(tower) → {valid, errors}`: checks all layout-validity rules from GDD §9.1.2.
+   - `roomsOnFloor(tower, floor) → builtRoom[]`.
+   - `canPlaceRoom(tower, draftRoom) → {ok, reason}`: reason ids: `not_enough_space`, `overlaps_room`, `floor_not_built`, `room_too_wide`.
+   - `canBuyFloor(tower) → {ok, reason}`: returns `{ok: false, reason: 'max_height'}` when `tower.maxBuiltFloor >= TOWER_MAX_FLOOR`; otherwise `{ok: true}`.
+   - `getFloorCost(tower) → {coins, comfort}`: for floor N (where N = `tower.maxBuiltFloor + 1`), apply ×1.7 from the previous *rounded* cost, starting from `FLOOR_BASE_COST` for floor 4. Round coins to nearest 50, comfort to nearest 25. Returns `{coins: 0, comfort: 0}` when `canBuyFloor` is false.
+   - `repairTowerLayout(state) → {state, warnings}`: GDD §16.7 repair order — restore to `defaultLayout`, move invalid non-launch rooms to inventory, evict cats per capacity rules, surface a warnings array.
+
+5. **Build actions in `src/store/buildMode.js`** (all pure functions operating on a draft value, never on persisted state directly):
+   - `createBuildDraft(tower) → draft`: snapshot of current tower layout.
+   - `stageBuyFloor(draft) → draft | {error}`: adds empty floor at `maxBuiltFloor + 1`. Returns `{error: 'max_height'}` if `canBuyFloor` fails.
+   - `stageMoveRoom(draft, roomInstanceId, floor, x) → draft | {error}`.
+   - `stagePlaceInventoryRoom(draft, roomInstanceId, floor, x) → draft | {error}`.
+   - `stageStoreRoom(draft, roomInstanceId, cats) → draft | {error}`: blocks if any cat has `currentRoom === roomTypeId` for this instance's type, or if it is a starter room (`kitchen`, `living_room`, `bedroom`).
+   - `discardBuildDraft(draft) → null`.
+   - `confirmBuildDraft(state, draft) → {state, cost, summary} | {error}`: compute total floor cost, verify affordability, deduct resources, write `state.tower`, return summary lines. Does **not** implement capacity-drop validation (deferred — see design decisions).
+   - `getDraftCost(draft, tower) → {coins, comfort}`: sum of all staged floor purchases.
+   - `getDraftSummary(draft) → string[]`: human-readable lines for the confirm panel.
+
+6. **UI state hook `src/hooks/useBuildMode.js`:**
+   ```js
+   const isUiVisible =
+     import.meta.env.VITE_BUILD_MODE_UI === 'true' ||
+     new URLSearchParams(window.location.search).get('buildMode') === '1';
+   ```
+   - State: `isBuildMode`, `draft`, `selectedRoomInstanceId`, `draggedRoom`, `invalidReason`, `placementCandidate` (the `roomInstanceId` of an inventory room being placed via tap-to-select, or `null`).
+   - Draft is not persisted. Reload discards it.
+   - While `isBuildMode` is true, expose `interactionLocked: true` for House-mode controls to read.
+
+7. **Diorama rendering update in `Diorama.jsx`:**
+   - Render from `state.tower.builtRooms`. Floors from `maxBuiltFloor` down to 1.
+   - Each floor: CSS grid, `TOWER_GRID_WIDTH` equal columns.
+   - Each room: `grid-column: x + 1 / span widthTiles`.
+   - Unused tiles on a floor render an exterior-wall / end-cap tile. Left-aligned rooms leave the right edge as the exposed wall.
+   - Empty purchased floors render as a slim platform outside build mode, as full tile guides in build mode.
+   - Room art: `/assets/rooms/{roomTypeId}_{level}.png` (unchanged).
+
+8. **Build mode components (rendered only when `isUiVisible` is true):**
+   - `src/components/BuildModeToolbar.jsx`: Buy Floor (greyed with "Tower at maximum height" when cap reached), Inventory, Store, Cancel (abort live drag; no per-action undo), Confirm Changes, Exit.
+   - `src/components/BuildInventory.jsx`: bottom sheet on mobile / side panel on web. Each card: room name, level, width, furniture count. Tap a card → sets `placementCandidate` and collapses the sheet; a "Placing: [Room name] — tap a floor [Cancel]" pill appears at the top of the screen. Drag-from-inventory is not implemented.
+   - `src/components/BuildConfirmPanel.jsx`: staged summary lines from `getDraftSummary`, total cost, missing-resource line if unaffordable, Apply / Discard / Stay buttons. Apply is disabled when `getDraftCost > resources`. Floor purchase summary lines explicitly note "(permanent)".
+   - `src/components/BuildGridOverlay.jsx`: tile guides, valid/invalid placement highlights, selected-room outline.
+
+9. **Interaction details:**
+   - House mode: tapping a room opens Room Detail as before.
+   - Build mode (built rooms): tapping a room selects it; dragging previews movement. Drop snaps to nearest integer `x` and floor.
+   - Build mode (inventory rooms): tap card → `placementCandidate` set → tap valid floor span → `stagePlaceInventoryRoom`. `Esc` or Cancel clears `placementCandidate`.
+   - Valid preview = green highlight. Invalid preview = amber/red highlight with reason string from GDD §9.1.2.
+   - Keyboard (web): `Esc` aborts live drag / clears `placementCandidate`. Arrow keys nudge selected room one tile/floor. `Enter` confirms current valid placement. `Delete` attempts Store Room.
+
+10. **Confirm / discard behavior:**
+    - Costs (floors only) charged on Confirm only.
+    - Production, events, offline simulation, and cat assignment use the last confirmed layout throughout drafting.
+    - Exiting with staged changes: Apply / Discard / Stay. Discarding restores `tower` from the pre-draft snapshot; no resources spent.
+    - Exiting with no staged changes returns to House mode immediately.
+    - Confirm is disabled if total cost exceeds current resources; shows missing Coins/Comfort.
+
+11. **Safety integration:**
+    - Block room detail, furniture purchase, room upgrade, cat info, cat drag, and cat unassign while `isBuildMode` is true.
+    - `stageStoreRoom` blocks on cats assigned to room or if starter room.
+    - Run `repairTowerLayout()` on every load after `migrate()`, before render.
+
+**Acceptance (run with `?buildMode=1` or `VITE_BUILD_MODE_UI=true`):**
+- A `version: 1` save (no `tower` field) migrates to `version: 2` on load: Kitchen at widthTiles 4, Living Room at 6, Bedroom at 5, all `x: 0`. Save persists as `version: 2`.
+- A `version: 2` save with a present `tower.gridWidthTiles` field has that field stripped on load.
+- Hammer icon appears when build flag is set; does not appear in a production build without the flag or URL override.
+- Entering build mode shows 6-tile floor guides, a Build toolbar, and disabled House-mode cat/furniture controls.
+- Buying a floor when `maxBuiltFloor < 12` stages a new empty floor; resources are not deducted until Confirm.
+- Buying a floor when `maxBuiltFloor === 12` is blocked; the Buy Floor button shows "Tower at maximum height."
+- Floor 4 cost is 1800 Coins / 250 Comfort. Floor 5 cost is 3050 Coins / 425 Comfort (1800 × 1.7 = 3060 → nearest 50; 250 × 1.7 = 425 → nearest 25).
+- Dragging Bedroom to a valid empty span previews green and stages the move on drop.
+- Dragging a room outside the 6-tile grid previews invalid and does not stage.
+- Overlapping another room previews invalid with reason "Overlaps another room."
+- Tapping an inventory card sets `placementCandidate`; the "Placing" pill appears; tapping a valid floor places the room.
+- Exiting with staged changes prompts Apply / Discard / Stay.
+- Confirm deducts the staged floor cost and persists the new `tower` layout across reload.
+- Confirm is disabled and shows missing resources when the player cannot afford staged changes.
+- Discard restores the original layout with no resource cost.
+- Reloading with an unconfirmed draft loses the draft and preserves the last confirmed layout.
+- Cats remain assigned after moving their room (assignment resolves by `roomTypeId` in this step).
+- Attempting to store a room with cats assigned is blocked.
+- Attempting to store Kitchen, Living Room, or Bedroom is blocked.
+- Mobile uses bottom-sheet inventory with tap-to-place; web uses side-panel inventory with drag or tap-to-place; all targets are at least 44px.
 
 ---
 
@@ -676,14 +810,15 @@ New cats, rooms, and furniture. Each expansion is independent; build the ones yo
 **Inputs:** GDD Section 8 (rooms) — pull whatever the GDD defines.
 
 **Do:**
-1. Extend `src/data/rooms.js`: `garden` (suggest `towerFloor: 0` ground level, `widthTiles: 6`, `alignment: 'center'`) and `study` (`towerFloor: 4` above bedroom, `widthTiles: 4`). Define `baseRates`, `baseCapacity`, `maxCapacity`, `furnitureSlots`. Add `unlockCondition: {type, threshold}`.
+1. Extend `src/data/rooms.js`: `garden` (`defaultWidthTiles: 6`) and `study` (`defaultWidthTiles: 3`). Define `baseRates`, `baseCapacity`, `maxCapacity`, `furnitureSlots`, `defaultLayout`, `minWidthTiles`, `maxWidthTiles`. Add `unlockCondition: {type, threshold}`.
 2. Add 4–6 new furniture items in `src/data/furniture.js` for the new rooms (per GDD 6.3 if defined; otherwise design analogous to existing rooms).
 3. New rooms locked by default in `initialState.js`: `room.unlocked = false`. Launch rooms `unlocked: true`.
-4. **`src/store/roomUnlock.js`** — same pattern as cat unlock. When threshold met, `room.unlocked = true`. `Diorama` filters to unlocked rooms.
+4. **`src/store/roomUnlock.js`** — same pattern as cat unlock. When threshold met, `room.unlocked = true` and create a room instance in `tower.inventory` (not auto-placed) unless build mode is not installed yet. If Step 20 is absent in a branch, fall back to the old authored-floor reveal.
 5. Most existing event/relationship logic is room-id-driven and should "just work". Verify production formulas in Section 6.2 cover the new rooms or extend the table.
 
 **Acceptance:**
-- Reaching the Coin threshold reveals Garden as a new floor.
+- Reaching the Coin threshold unlocks Garden and places a Garden room card in Build Inventory.
+- Placing Garden from inventory onto a purchased floor makes it visible in the tower.
 - Cats can be assigned; production calculates correctly.
 - Reload preserves unlock + assignments.
 - Tile-grid layout (Step 20) handles the new room widths cleanly.

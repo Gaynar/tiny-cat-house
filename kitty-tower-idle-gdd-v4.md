@@ -434,13 +434,169 @@ Tower building is the central progression system.
 
 Each room has a `towerFloor` integer. Floors increase upward. The UI renders higher floor numbers above lower floor numbers. New room unlocks receive the next available floor number unless a future feature explicitly allows reordering.
 
-### 9.1.2 Player-Driven Build Mode (Planned, Post-Launch)
+### 9.1.2 Player-Driven Build Mode (Post-Launch)
 
-A future feature will let the player customize the tower layout directly: buying new floors, buying rooms à la carte, moving rooms between floors, repositioning rooms horizontally within a tile-based floor grid, and storing rooms in an inventory. Until this lands:
-- Room `towerFloor` values are static (defined in `src/data/rooms.js`); new rooms unlock at their authored floor.
-- There is no per-room horizontal alignment or width concept; rooms render at the diorama's full width.
+Build mode is the player's tower-editing tool. It lets the player decide which rooms exist, where they sit in the vertical tower, and how wide or narrow each floor feels. Build mode is not cat assignment, furniture purchase, or room upgrade UI — those remain House-mode and Room Detail actions. Build mode changes the structure of the tower; House mode manages what happens inside it.
 
-When build mode ships, layout positioning (floor index, horizontal offset, room width in tiles) becomes a property of the player's save state, not the room *type* definition. The current `towerFloor` field becomes a default starting position, not an immutable property. This section is a placeholder; the full build-mode design (costs, inventory rules, eviction-on-move semantics, tutorial integration, unlock gating) will be specified before implementation.
+**Feature status:** Post-launch. The launch build keeps the authored 3-room stack and does not expose build mode. The data model should still avoid hard-coding future layout assumptions where possible.
+
+**Design goal:** Build mode should feel like arranging a cozy vertical dollhouse, not like editing a spreadsheet. The player should understand every action visually: buy a floor, place a room, move a room, store a room, confirm.
+
+**Core actions:**
+
+| Action | Description | Allowed in launch? |
+|---|---|---|
+| Enter Build Mode | Switches the house into structural editing state. Cats, resources, and production continue in the background, but assignment controls are disabled. | No |
+| Buy Floor | Adds one empty floor above the current top floor. | Post-launch |
+| Buy Room | Purchases a new room type and places it into inventory if it cannot be placed immediately. | Post-launch |
+| Place Room | Places an inventory room into an empty valid area. | Post-launch |
+| Move Room | Picks up an already-built room and previews valid positions. | Post-launch |
+| Store Room | Moves a built room into inventory if storage rules are satisfied. | Post-launch |
+| Cancel Move | Returns the picked-up room to its original position with no state changes. | Post-launch |
+| Confirm Changes | Commits all staged room moves, floor purchases, and inventory changes. | Post-launch |
+| Exit Build Mode | Leaves build mode. If there are unconfirmed changes, prompt to Apply or Discard. | Post-launch |
+
+**Mode entry and exit:**
+- Build mode opens from a hammer icon in the House view.
+- The resource bar remains visible and live.
+- Cat roster, cat dragging, room detail buttons, furniture buttons, and upgrade buttons are disabled while build mode is active.
+- Tapping a room in build mode selects it for moving; tapping a room in House mode opens the room detail panel.
+- Exiting with no staged changes returns immediately to House mode.
+- Exiting with staged changes shows: **Apply Changes**, **Discard Changes**, **Stay in Build Mode**.
+
+**Tower grid:**
+- The tower uses a fixed horizontal grid of **6 tiles** per floor.
+- Each room type has a `widthTiles` value from **2–6**.
+- Rooms occupy one vertical floor and a contiguous horizontal span: `{ floor, x, widthTiles }`.
+- `x` is zero-based and must satisfy `0 <= x` and `x + widthTiles <= 6`.
+- Multiple rooms may share one floor if their spans do not overlap.
+- A floor can be empty, but empty floors are visually compressed to a slim construction platform unless selected in build mode.
+- New floors are added above the current highest floor. Floors are never inserted between existing floors in the first build-mode version.
+- Floor 1 remains the bottom floor. Higher floor numbers render above lower numbers.
+
+**Starter layout when build mode first exists:**
+
+| Room | Floor | Width | X position |
+|---|---:|---:|---:|
+| Kitchen | 1 | 4 | 0 |
+| Living Room | 2 | 6 | 0 |
+| Bedroom | 3 | 5 | 0 |
+
+Starter rooms render at their `defaultWidthTiles` and are left-aligned at `x=0`. Existing saves migrate from the legacy full-width 3-room stack: on first build-mode-aware load, each starter room is created at its default width, leaving the unused right-edge tiles to render as exterior wall. This is a one-time visual re-anchor and is intentional — width should track capacity, and the legacy uniform-width tower predates the grid concept.
+
+**Room type layout defaults:**
+
+| Room | Default widthTiles | Min widthTiles | Max widthTiles | Can resize? |
+|---|---:|---:|---:|---|
+| Kitchen | 4 | 4 | 6 | Later |
+| Living Room | 6 | 4 | 6 | Later |
+| Bedroom | 5 | 4 | 6 | Later |
+| Garden | 6 | 6 | 6 | No |
+| Study | 3 | 3 | 4 | Later |
+
+For the first build-mode release, rooms are placed at their default width and cannot be resized by the player. `minWidthTiles` and `maxWidthTiles` exist so future resizing can be added without redefining room data.
+
+**Costs and pacing:**
+
+| Purchase | Cost | Requirement |
+|---|---:|---|
+| First extra floor (floor 4) | 1800 Coins + 250 Comfort | None — affordability only |
+| Each subsequent floor | Previous floor cost ×1.7, rounded each step to nearest 50 Coins / 25 Comfort | Previous floor purchased |
+
+Floors are gated by Coins/Comfort only. There are no secondary "room must be Level 2" or "N rooms unlocked" gates. The cost ramp soft-paces tower height; the hard cap (below) enforces a ceiling.
+
+**Tower height cap:** The tower has a hard maximum of **12 floors total** (3 starter + 9 player-bought). Once `maxBuiltFloor === 12`, the Buy Floor action is blocked with the reason "Tower at maximum height."
+
+**Rooms are not bought with Coins.** New room types enter inventory automatically when their cat-relationship-threshold or Cat Diary unlock condition is met (see Section 7.4 and Section 14). The build-mode action set does not include "Buy Room" — rooms appear in inventory as the player progresses, and build mode is for placing and arranging them.
+
+Build-mode costs (floors only) are paid on **Confirm Changes**, not when dragging previews. This lets the player experiment freely before committing. Floor purchases are permanent: once confirmed, a floor cannot be un-bought, refunded, or removed.
+
+**Staged changes:**
+- Build mode edits a temporary draft layout.
+- Draft changes do not affect production, offline simulation, room capacity, event logic, or cat assignment until confirmed.
+- The confirm panel shows total cost and a plain summary: "Add 1 floor, place Garden, move Bedroom."
+- If the player cannot afford the staged build, Confirm is disabled and the missing resources are shown.
+- Discarding staged changes restores the original layout and inventory.
+
+**Inventory rules:**
+- Inventory stores room instances, not room types.
+- Each inventory item has `roomInstanceId`, `roomTypeId`, `level`, `furniture`, and any room-specific persistent data.
+- A room instance is created automatically when a room's cat-relationship-threshold or Cat Diary unlock condition is met (see Section 7.4 and Section 14). There is no "Buy Room" action in build mode.
+- Storing a room preserves its level and furniture.
+- A room in inventory produces nothing, generates no events, and cannot hold cats.
+- A room in inventory still exists for save purposes and can be placed later.
+- Launch rooms cannot be sold or deleted. Post-launch rooms also cannot be sold in the first build-mode version; storage is the only removal action.
+
+**Cat eviction and safety rules:**
+- Moving a room to another valid location does not evict cats. Cat assignments remain attached to `roomInstanceId`.
+- Storing a room with cats assigned is blocked. The UI says: "Move cats out before storing this room."
+- Confirming a layout where a room's capacity would drop below its current cat count is blocked. (Validator implemented when the first capacity-changing action ships — room resize or room downgrade. In the first build-mode release no action changes capacity, so this validator is a no-op and is not yet implemented.)
+- If a migration or corrupted save produces an invalid layout, repair in this order: restore each invalid room to its `defaultLayout`; if still invalid, move non-launch rooms to inventory; if still invalid, evict cats per Section 16.7 capacity rules and surface a warning.
+
+**Room identity:**
+- `roomTypeId` describes what a room is: Kitchen, Bedroom, Living Room.
+- `roomInstanceId` identifies the specific built room in the player's tower.
+- Cat assignment should eventually point to `roomInstanceId`, not `roomTypeId`, because the player may own more than one room of a type later.
+- For the launch build, `currentRoom: "bedroom"` is acceptable because only one instance of each room exists. Build mode requires a migration path to instance IDs before multiple same-type rooms are allowed.
+
+**Layout validity:**
+A layout is valid only if:
+- Every built room references an unlocked or purchased room instance.
+- Every built room has an integer `floor`, `x`, and `widthTiles`.
+- No room extends outside the 6-tile floor.
+- No two rooms overlap on the same floor.
+- Every floor from 1 through `maxBuiltFloor` exists as either an occupied floor or empty purchased floor.
+- At least one room remains built.
+- The starter rooms are either built or stored only if storage has been explicitly unlocked for starter rooms. In the first build-mode release, starter-room storage is locked.
+
+**Build mode visual states:**
+- Normal built room: full-color room art.
+- Selected room: bright outline and small move handle.
+- Picked-up room: follows pointer/finger as a translucent room card.
+- Valid placement preview: green floor/tile highlight.
+- Invalid placement preview: amber/red highlight with a short reason.
+- Empty purchased floor: wooden platform with tile guides visible only in build mode.
+- Inventory room: small room card with room name, level, width, and furniture count.
+
+**Invalid placement reasons:**
+- "Not enough space"
+- "Overlaps another room"
+- "Floor not built"
+- "Room too wide for this spot"
+- "Move cats out first"
+- "Can't store starter rooms yet"
+- "Not enough Coins"
+- "Not enough Comfort"
+- "Tower at maximum height"
+
+**Mobile interaction:**
+- Tap hammer icon to enter build mode.
+- Tap a built room to select it; drag the selected room to move it to a new floor/position.
+- Tap empty valid floor to place a selected built room at the nearest snapped `x`.
+- **Placing from inventory (tap-to-select-then-tap):** Tap an inventory card in the bottom sheet → sheet collapses → a "Placing: [Room name] — tap a floor" pill appears at the top of the screen with a Cancel button → tap a valid floor span to place. Drag-from-inventory is not supported in the first build-mode release.
+- Inventory opens as a bottom sheet.
+- Floor purchase is a fixed button at the bottom of the build toolbar.
+- All interactive targets are at least 44×44px.
+- Pinch/zoom is not required. The tower can scroll vertically.
+
+**Web interaction:**
+- Build toolbar appears on the right panel.
+- Room inventory appears below the toolbar.
+- Drag-and-drop works with pointer input.
+- Keyboard support: `Esc` cancels current move; arrow keys nudge selected room one tile/floor; `Enter` confirms placement if valid; `Delete` attempts Store Room.
+
+**Production and offline behavior while building:**
+- While build mode is open, live ticks continue using the last confirmed layout.
+- Offline simulation is never based on an unconfirmed draft.
+- If the app is closed while build mode has staged changes, the staged draft is discarded on next load unless it was confirmed.
+- The save should not persist half-drag state.
+
+**Implementation notes:**
+- Once build mode ships, `towerFloor` in room type data is only a default placement hint. The authoritative layout lives in save data as player-owned room instances and positions.
+- Floor purchases are permanent. There is no un-buy, no refund, and no floor-removal action in the first build-mode release.
+- `TOWER_GRID_WIDTH = 6` is a compile-time constant, not a save field. It is not stored in save data. A future tower-width change would require a version bump and migration.
+- The build-mode hammer icon and toolbar are gated by a build-time feature flag (`VITE_BUILD_MODE_UI`). In development builds and via the `?buildMode=1` URL override, the UI is reachable for testing. In production, it is dark until the flag is enabled as part of the Step 25 room-unlock ship.
+- `buildModeUnlocked` in save data (`tower.buildModeUnlocked`) defaults to `true` from `createInitialState()`. The eventual design intent is to gate this behind a tutorial step; that is a later change. The build-time flag (above) is the production gate in the first build-mode release.
 
 ### 9.2 Room Expansion Paths
 
@@ -681,7 +837,7 @@ All game state is stored in a single JSON object under the key `kittyTowerIdle_s
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "lastTickTimestamp": 1700000000000,
   "resources": {
     "coins": 0.0,
@@ -732,6 +888,16 @@ All game state is stored in a single JSON object under the key `kittyTowerIdle_s
       "unlocked": true
     }
   ],
+  "tower": {
+    "maxBuiltFloor": 3,
+    "builtRooms": [
+      { "roomInstanceId": "room_bedroom_001", "roomTypeId": "bedroom", "floor": 3, "x": 0, "widthTiles": 5 },
+      { "roomInstanceId": "room_living_room_001", "roomTypeId": "living_room", "floor": 2, "x": 0, "widthTiles": 6 },
+      { "roomInstanceId": "room_kitchen_001", "roomTypeId": "kitchen", "floor": 1, "x": 0, "widthTiles": 4 }
+    ],
+    "inventory": [],
+    "buildModeUnlocked": true
+  },
   "diary": {
     "interactions": [
       { "id": "nap_pile", "discoveredAt": 1700000000000 }
@@ -761,6 +927,13 @@ All game state is stored in a single JSON object under the key `kittyTowerIdle_s
 - `cat.stateTransitionDue` is a Unix ms timestamp sampled once on state entry. Never reset on reload.
 - `cat.roomSessions` tracks completed sessions per room (see Section 14.3 for session definition). `currentRoom: null` means the cat is unassigned and produces no output.
 - `room.towerFloor` stores the room's vertical position. Higher floor numbers render above lower floor numbers. Existing saves missing this field default from `src/data/rooms.js`.
+- `version` must be `2` for saves that include the `tower` field. `version: 1` saves are migrated on load via `migrate1to2`: `tower` is created from the 3 launch rooms at their `defaultWidthTiles` (Kitchen 4, Living Room 6, Bedroom 5), all at `x=0`, and `version` is written as `2`.
+- `tower` is present in all `version: 2` saves. The grid width is a compile-time constant (`TOWER_GRID_WIDTH = 6`) and is not stored in save data.
+- `tower.maxBuiltFloor` is the highest floor index ever purchased. Hard maximum: `TOWER_MAX_FLOOR = 12`.
+- `tower.builtRooms` stores the confirmed player layout. Each entry is `{ roomInstanceId, roomTypeId, floor, x, widthTiles }`.
+- `tower.inventory` stores unplaced room instances. Inventory room instances preserve room level, furniture, and room-specific data; they do not produce resources.
+- `tower.buildModeUnlocked` defaults to `true` in `createInitialState()`. The build-mode UI is additionally gated by a build-time feature flag (`VITE_BUILD_MODE_UI`); in production this flag is `false` until the Step 25 room-unlock ship. Tutorial-based unlock is planned for a later step.
+- During the migration from launch rooms to room instances, `cat.currentRoom` may still reference a room type ID. Once build mode supports multiple same-type rooms, assignments must reference `roomInstanceId`.
 - `eventCooldowns` is a top-level map of `{ eventId: timestampMs }` marking when each event last fired. Respected during offline simulation.
 - `diary.interactions` and `diary.events` entries are `{ id, discoveredAt }`. Absence = undiscovered.
 - `diary.hints` entries are `{ id, catId, roomId, discoveredAt }`.
@@ -785,6 +958,11 @@ Main House View (default)
 │   ├── Cat slot cards (cat, state, current output)
 │   ├── Furniture slots (placed items and empty slots)
 │   └── Upgrade button
+├── Build Mode button (post-launch)
+│   ├── Build toolbar
+│   ├── Floor purchase action
+│   ├── Room inventory
+│   └── Confirm / discard staged changes
 ├── Cat roster button → Cat Roster Screen
 ├── Cat Diary button → Cat Diary Screen
 ├── Resource bar (top) — Coins and Comfort always visible
@@ -817,6 +995,18 @@ The indicator is shown from the very first placement (consistent with Like/Disli
 **Offline Summary Overlay:**
 - Time away, resources earned, event list, new diary entries, relationship changes.
 - Dismissed with a "Collect" button.
+
+**Build Mode Screen State:**
+- The hammer icon and build toolbar are rendered only when the build-time feature flag `VITE_BUILD_MODE_UI` is `true`, or when `?buildMode=1` is present in the URL (dev/QA override). In production, the flag is `false` until the Step 25 ship.
+- Entered from the House view using a hammer icon (when visible per flag above).
+- Resource bar stays visible.
+- Room grid overlays appear on every built floor.
+- The active side panel or bottom sheet becomes the Build toolbar.
+- Cat assignment, cat info panels, furniture purchase, and room upgrade controls are disabled.
+- The toolbar shows: Buy Floor, Inventory, Store Room, Cancel, Confirm Changes, Exit. ("Cancel" aborts only the current in-progress drag; Discard in the exit prompt resets the whole draft.)
+- The confirm button is disabled until there is at least one staged change.
+- The confirm panel lists total Coins/Comfort cost and every staged change (e.g. "Add Floor 4 (permanent), move Bedroom to floor 4").
+- Draft changes are visual only until confirmed.
 
 **First-run experience / Tutorial:**
 
@@ -859,6 +1049,18 @@ When calculating a cat's output for a given tick, resolve modifiers in order in 
 **Offline time exceeds cap:** Silently cap to max offline duration. Do not show how much time was wasted.
 
 **No cats assigned to a room:** Room produces nothing and generates no events. Valid — an empty room should not error.
+
+**Build mode draft exists when app closes:** Discard the draft on next load. Only confirmed layouts are persisted.
+
+**Room moved while cats are assigned:** Valid. Cats remain assigned to the same room instance and move with the room.
+
+**Attempt to store a room with cats inside:** Block the action. The player must unassign or move every cat first.
+
+**Attempt to store a starter room:** Block in the first build-mode release. Starter room storage can be unlocked later if the game supports alternate required-room logic.
+
+**Invalid tower layout on load:** Repair without deleting player progress when possible. First rebuild missing layout from room defaults. Then move invalid non-starter rooms to inventory. Only evict cats if a room instance no longer exists or capacity is still invalid after repair.
+
+**Overlapping rooms on load:** Keep the earliest-created room in place and move later-created overlapping rooms to inventory. If creation timestamps are missing, use stable room order from save array order.
 
 **Missing fields on load:** Any field absent from a loaded save is silently initialized to its default value at load time. This handles all additive changes — new cats, new relationship entries, new settings flags — without requiring a version bump or migration function. New cats added post-launch initialize relationship entries for all existing cats as `{ tier: "neutral", score: 0 }` if not already present.
 
