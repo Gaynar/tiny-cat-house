@@ -436,47 +436,38 @@ These are independent visual / feel upgrades on top of the launch game. Pick any
 
 ## Step 19 — Resource delta toasts
 
-**Goal:** When Coins or Comfort change, a small floating number appears under the corresponding icon and fades upward. Gains in green, losses in red. Production gains debounce/accumulate (since they tick continuously). Spend events (furniture, upgrades) emit immediately.
+**Goal:** When Coins or Comfort change, a small floating number appears under the corresponding icon and fades upward. Gains in green, losses in red. Production gains accumulate between ticks; spend events (furniture, upgrades) emit immediately.
 
-**Inputs:** existing `runTick` and the spend actions in `src/store/upgrades.js`.
+**Inputs:** existing `runTick`, the live tick path in `src/store/gameState.js`, and the spend actions in `src/store/upgrades.js`.
 
 **Do:**
 1. **`src/store/resourceDeltas.js`** — a tiny pub-sub. Exports `subscribe(listener)` returning an unsubscribe fn, and `emit({resource, delta})`. No React, no state — just a `Set` of listeners.
-2. **`src/store/tick.js`** — extend `runTick` to compute the per-tick delta for `coins` and `comfort` after production. Accumulate gains into a per-resource bucket on the provider; flush a single `emit({resource, delta: floor(bucket)})` per resource each ~1s when `bucket >= 0.5`. Floor before emit; carry the fractional remainder.
-3. **`src/store/upgrades.js`** — on a successful `purchaseFurniture` / `upgradeRoom`, synchronously emit `{resource: 'coins', delta: -cost.coins}` and `{resource: 'comfort', delta: -cost.comfort}`. Skip on failure (return null path).
-4. **`src/components/ResourceDeltaToast.jsx`** — listens via `useEffect(() => subscribe(...))`, holds a queue `[{id, resource, delta}]`. Each toast renders absolutely-positioned next to the matching icon: `+3` in green (`#3a9d3a`), `-270` in red (`#c44`). CSS animation lifts ~30px and fades over 1.2s; remove from queue on `animationend`.
-5. Mount the toast layer inside `ResourceBar` so toasts sit under the right icon.
-6. Cap visible toasts at ~5 per resource — drop oldest when over.
+2. **`src/store/tick.js`** — extend `runTick` to return `{state, firedEvents, gains}` where `gains = {coins, comfort}` is the delta added this tick (already multiplied by elapsed minutes). `runTick` stays pure — no `emit` calls inside.
+3. **`src/store/gameState.js`** — provider holds `bucketsRef = useRef({coins: 0, comfort: 0})`. In the live `onTick` callback, accumulate `result.gains.coins` and `result.gains.comfort` into the buckets. After accumulating, for each resource: if `floor(bucket) >= 1`, call `emit({resource, delta: floor(bucket)})` and subtract that floored amount from the bucket (carry the fractional remainder). Tick cadence is 5s (existing `useGameTick`), so flush is per-tick. Offline catch-up via `simulateOffline` does **not** emit — toasts are live-tick only; the offline summary overlay is the canonical "while you were away" feedback.
+4. **`src/store/upgrades.js`** — change `purchaseFurniture` and `upgradeRoom` to return `{state, cost: {coins, comfort}}` on success (or `null` on failure). Store stays pure — no `emit` calls inside. Update existing tests to destructure `.state`.
+5. **Caller-side spend emit** — in the components that call `purchaseFurniture` / `upgradeRoom` (e.g. `RoomDetailPanel`, `FurnitureSlot`), on a non-null return emit `{resource: 'coins', delta: -cost.coins}` and `{resource: 'comfort', delta: -cost.comfort}` (skip emits where the cost is 0).
+6. **`src/components/ResourceDeltaToast.jsx`** — props `resource`. Subscribes via `useEffect(() => subscribe(...))` and filters to its own `resource`. Holds a queue `[{id, delta}]`; on insert, `setQueue(q => [...q, newToast].slice(-5))`. Each toast renders absolutely-positioned within the wrapping pill: `+3` in green (`#3a9d3a`), `-270` in red (`#c44`). CSS animation lifts ~30px and fades over 1.2s; remove from queue on `animationend`. If `prefers-reduced-motion: reduce`, render `null` (subscriber still attaches but produces no UI).
+7. **`ResourceBar`** — wrap each pill in a `.resource-pill-wrap` (`position: relative`) and render `<ResourceDeltaToast resource="coins" />` / `<ResourceDeltaToast resource="comfort" />` inside the matching wrapper.
 
 **Acceptance:**
-- Mochi alone in Kitchen → green `+1`s float up under Coins every ~1s.
-- Buying Heated Blanket → red `-270` and `-30` appear under Coins and Comfort immediately.
-- Toasts always fade and clear; queue never grows unbounded.
-- Multiple toasts stack vertically without obscuring the icon.
+- Mochi alone in Kitchen → green `+1`s float up under Coins as they accumulate (slow trickle: roughly one `+1` every several ticks at low production rates).
+- Buying Heated Blanket → red `-270` and `-30` appear under Coins and Comfort immediately on click.
+- Toasts always fade and clear; queue never grows past 5 per resource (oldest dropped on insert).
+- Multiple toasts stack visually via animation stagger (each starts at the same baseline; older toasts have already moved up).
+- Reduced-motion users see no toasts (the underlying numbers in the pills still update).
+- Offline catch-up does not produce toasts — the offline summary overlay handles that path.
+- `runTick` and the upgrades store functions remain pure (no side effects); the bucket lives in a `useRef` in the provider.
 - The pub-sub is not in save state.
 
 ---
 
 ## Step 20 — Tile-grid tower layout (visual only)
 
-**Goal:** The tower renders on a fixed 10-tile-wide grid. Kitchen = 4 tiles, Living Room = 6 tiles, Bedroom = 4 tiles. Rooms sit at proportional pixel widths inside a centered tower frame. **Pure visual** — capacity, production, drag-drop, all GDD numbers unchanged.
+**Status:** **Shelved.** The visual tile-grid (per-room widths, alignment within a fixed-width tower frame) requires player-driven placement to be coherent. Per-floor alignment was originally specified as authored by us ("pick what reads best per floor"), but layout positioning belongs to the player, not the room type — hard-coding alignment now would just create throwaway data when build mode lands. The visual layout work and the build-mode UI ship together as a single later step.
 
-**Inputs:** GDD A.4 (room style notes), Section 16.5 (UI layout), GDD Section 10 (capacity numbers — must remain authoritative).
+**Until then:** Rooms continue to render at their current full-width layout. No `widthTiles`, no `alignment`, no `TOWER_TILES` / `TILE_PX` constants get added to `src/data/rooms.js` or anywhere else. GDD Section 10 capacity numbers are unchanged.
 
-**Do:**
-1. **`src/data/rooms.js`** — add per-room `widthTiles` (kitchen 4, living_room 6, bedroom 4) and `alignment` ('left' | 'center' | 'right' — pick what reads best per floor). Add module-level constants `TOWER_TILES = 10` and `TILE_PX = 32` (or whatever pixel size matches your sprite scale). Do **not** touch `baseCapacity` or `maxCapacity`.
-2. **`src/components/Diorama.jsx`** — wrap the floors in a `.tower-frame` element of fixed pixel width = `TOWER_TILES * TILE_PX`, centered horizontally. Each `RoomView` renders inside this frame.
-3. **`src/components/RoomView.jsx`** — set inline `width: room.widthTiles * TILE_PX`. Apply alignment via margin (`marginLeft: 'auto'` / `0` / centered) based on `room.alignment`. Keep the room background image / placeholder color bound to the room's actual width — narrower rooms look smaller on the floor.
-4. Drag preview tints, capacity overlays, drop targets, cat sprites all continue to work at the room's new width — no logic changes, the elements just span fewer pixels.
-5. **Mobile scaling:** at <640px the `.tower-frame` should fit the viewport without distorting tile proportions. Use `max-width: 100%` plus a CSS `transform: scale(...)` calculated against viewport width, or set `TILE_PX` responsively via a CSS variable.
-6. **Dev guides (optional, off by default):** behind a dev flag, render faint 1px vertical lines per tile behind the rooms to verify alignment.
-
-**Acceptance:**
-- Tower visibly 10 tiles wide. Bedroom and Kitchen render at 4-tile width; Living Room at 6.
-- Alignment is consistent and intentional (e.g. Kitchen left, Living Room center, Bedroom right — your call).
-- All Phase 1–3 mechanics still work: drag-drop, capacity caps, preview tints, cat sprites, Like/Dislike, events.
-- Mobile scales the whole tower frame to fit; tile proportions preserved.
-- GDD capacity numbers remain authoritative — room width is decoration only.
+**Future build-mode step (TBD, not yet specified):** Will introduce a save-state-backed tower layout (e.g. `[{floor, roomId, xOffset}]` entries owned by the player), per-room `widthTiles`, a buy-floors / buy-rooms / move-rooms / inventory UI, and the centered `.tower-frame` rendering. Needs its own GDD section (see GDD §9.1.2 placeholder) and its own grilling pass before implementation.
 
 ---
 

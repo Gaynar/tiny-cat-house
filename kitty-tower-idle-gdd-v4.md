@@ -434,6 +434,14 @@ Tower building is the central progression system.
 
 Each room has a `towerFloor` integer. Floors increase upward. The UI renders higher floor numbers above lower floor numbers. New room unlocks receive the next available floor number unless a future feature explicitly allows reordering.
 
+### 9.1.2 Player-Driven Build Mode (Planned, Post-Launch)
+
+A future feature will let the player customize the tower layout directly: buying new floors, buying rooms à la carte, moving rooms between floors, repositioning rooms horizontally within a tile-based floor grid, and storing rooms in an inventory. Until this lands:
+- Room `towerFloor` values are static (defined in `src/data/rooms.js`); new rooms unlock at their authored floor.
+- There is no per-room horizontal alignment or width concept; rooms render at the diorama's full width.
+
+When build mode ships, layout positioning (floor index, horizontal offset, room width in tiles) becomes a property of the player's save state, not the room *type* definition. The current `towerFloor` field becomes a default starting position, not an immutable property. This section is a placeholder; the full build-mode design (costs, inventory rules, eviction-on-move semantics, tutorial integration, unlock gating) will be specified before implementation.
+
 ### 9.2 Room Expansion Paths
 
 Each room has multiple expansion levels that add capacity, furniture slots, and behavioral changes. Room specialization paths (branching upgrade directions per room) are a **post-launch feature** — the launch build uses the linear upgrade paths defined in Section 6.3 only.
