@@ -1,0 +1,245 @@
+body {
+  background: #f5eee2;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #75634e;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.app-main {
+  width: min(100%, 1120px);
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.35fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.panel {
+  border: 2px solid rgba(80, 59, 39, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 250, 241, 0.92);
+  box-shadow: 0 14px 34px rgba(63, 45, 31, 0.1);
+}
+
+.control-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 18px;
+}
+
+.control-panel h2,
+.hector-panel h2,
+.house-panel h2 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+.control-panel p,
+.hector-panel p,
+.room-card p {
+  margin: 0;
+  color: #5d4e3f;
+  line-height: 1.5;
+}
+
+.phase-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-weight: 900;
+}
+
+.phase-badge svg {
+  width: 18px;
+  height: 18px;
+}
+
+.phase-badge.day {
+  background: #fff0b8;
+  color: #72520e;
+}
+
+.phase-badge.night {
+  background: #d9ddff;
+  color: #30345f;
+}
+
+.primary-button,
+.debug-reset {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  font-weight: 900;
+}
+
+.primary-button {
+  padding: 0 18px;
+  background: #2f7f68;
+  color: #fffdf7;
+}
+
+.debug-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.debug-reset {
+  padding: 0 12px;
+  border: 1px solid rgba(80, 59, 39, 0.16);
+  background: #fff8eb;
+  color: #5d4e3f;
+}
+
+.debug-reset svg {
+  width: 17px;
+  height: 17px;
+}
+
+.hector-panel {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 16px;
+  padding: 18px;
+}
+
+.hector-portrait {
+  display: grid;
+  width: 112px;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 3px solid #4f3b27;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.32), rgba(53, 35, 25, 0.08)),
+    #f2b36d;
+  color: #4f3b27;
+  font-size: 4rem;
+  font-weight: 1000;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+}
+
+.stat-grid div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #fff2d8;
+}
+
+.stat-grid dt {
+  color: #75634e;
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.stat-grid dd {
+  margin: 2px 0 0;
+  font-size: 1.25rem;
+  font-weight: 1000;
+}
+
+.house-panel {
+  padding: 18px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.section-heading svg {
+  width: 28px;
+  height: 28px;
+  color: #2f7f68;
+}
+
+.room-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.room-card {
+  min-height: 132px;
+  padding: 12px;
+  border: 1px solid rgba(80, 59, 39, 0.16);
+  border-radius: 8px;
+  background: #fff8eb;
+}
+
+.room-card h3 {
+  margin: 0 0 6px;
+  font-size: 1.02rem;
+}
+
+.room-card small {
+  display: block;
+  margin-top: 10px;
+  color: #75634e;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.room-floor {
+  margin: 0 0 4px;
+  color: #8a6240;
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.resource-pill.fishbones {
+  background: #fff2d8;
+}
+
+.resource-pill.tuna {
+  background: #e3f1ee;
+}
+
+@media (max-width: 780px) {
+  .dashboard-grid,
+  .hector-panel,
+  .room-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .resource-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .hector-portrait {
+    width: 96px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

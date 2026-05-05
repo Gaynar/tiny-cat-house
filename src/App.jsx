@@ -1,294 +1,200 @@
-import { useEffect, useRef, useState } from 'react';
-import { CatInfoPanel } from './components/CatInfoPanel.jsx';
-import { CatDiary } from './components/CatDiary.jsx';
-import { CatRosterScreen } from './components/CatRosterScreen.jsx';
-import { CatRoster } from './components/CatRoster.jsx';
-import { Diorama } from './components/Diorama.jsx';
-import { EventCardStack } from './components/EventCardStack.jsx';
-import { OfflineSummaryOverlay } from './components/OfflineSummaryOverlay.jsx';
-import { ResourceBar } from './components/ResourceBar.jsx';
-import { RoomDetailPanel } from './components/RoomDetailPanel.jsx';
-import { Tutorial } from './components/Tutorial.jsx';
-import { assignCat } from './store/actions.js';
+import { Home, Moon, RotateCcw, Sun } from 'lucide-react';
 import { GameStateProvider, useGameState } from './store/gameState.js';
 import { resetSave } from './store/persistence.js';
-import { sampleTransitionDue } from './store/transitions.js';
+import './hector.css';
 
-const DRAG_THRESHOLD = 8;
-
-function useDesktopLayout() {
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window === 'undefined' ? false : window.matchMedia('(min-width: 641px)').matches,
-  );
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(min-width: 641px)');
-    const handleChange = () => setIsDesktop(mediaQuery.matches);
-    handleChange();
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
-
-  return isDesktop;
+function formatResource(value) {
+  return Math.floor(value ?? 0).toLocaleString();
 }
 
-function Game() {
-  const { state, setState, liveEvents, dismissLiveEvent } = useGameState();
-  const isDesktop = useDesktopLayout();
-  const [activeCatInfoId, setActiveCatInfoId] = useState(null);
-  const [activeRoomId, setActiveRoomId] = useState(null);
-  const [sidePanel, setSidePanel] = useState('cats');
-  const [diaryOpen, setDiaryOpen] = useState(false);
-  const [catsOpen, setCatsOpen] = useState(false);
-  const [dragState, setDragState] = useState(null);
-  const [hoveredRoomId, setHoveredRoomId] = useState(null);
-  const [roomMessage, setRoomMessage] = useState(null);
-  const dragRef = useRef(null);
-  const stateRef = useRef(state);
-  const messageTimeoutRef = useRef(null);
-  const isTrackingDrag = Boolean(dragState);
+function ResourceBar() {
+  const { state } = useGameState();
 
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  return (
+    <header className="resource-bar">
+      <div>
+        <p className="eyebrow">Day {state.day}</p>
+        <h1 className="resource-title">Hector&apos;s Adventure</h1>
+      </div>
+      <div className="resource-pills" aria-label="Resources">
+        <div className="resource-pill fishbones" aria-label="Fishbones">
+          <span aria-hidden="true">Fishbones</span>
+          <strong>{formatResource(state.resources.fishbones)}</strong>
+        </div>
+        <div className="resource-pill tuna" aria-label="Canned Tuna">
+          <span aria-hidden="true">Canned Tuna</span>
+          <strong>{formatResource(state.resources.cannedTuna)}</strong>
+        </div>
+      </div>
+    </header>
+  );
+}
 
-  useEffect(() => {
-    if (state.tutorialStep === 1 && state.resources.comfort > 0) {
-      setState((currentState) => ({ ...currentState, tutorialStep: 2 }));
-    } else if (state.tutorialStep === 2 && state.resources.comfort >= 1) {
-      setState((currentState) => ({ ...currentState, tutorialStep: 3 }));
-    }
-  }, [state.resources.comfort, state.tutorialStep, setState]);
+function PhaseBadge() {
+  const { state } = useGameState();
+  const isDay = state.phase === 'day';
+  const Icon = isDay ? Sun : Moon;
 
-  useEffect(() => {
-    document.body.dataset.tutorialStep = String(state.tutorialStep ?? 0);
-    return () => {
-      delete document.body.dataset.tutorialStep;
-    };
-  }, [state.tutorialStep]);
+  return (
+    <div className={`phase-badge ${isDay ? 'day' : 'night'}`}>
+      <Icon aria-hidden="true" />
+      <span>{isDay ? 'Day preparation' : 'Night run'}</span>
+    </div>
+  );
+}
 
-  function showRoomMessage(roomId, text) {
-    window.clearTimeout(messageTimeoutRef.current);
-    setRoomMessage({ roomId, text });
-    messageTimeoutRef.current = window.setTimeout(() => setRoomMessage(null), 1200);
+function HectorPanel() {
+  const { state } = useGameState();
+  const stats = state.hector.stats;
+
+  return (
+    <section className="panel hector-panel" aria-labelledby="hector-heading">
+      <div className="hector-portrait pixel-art" aria-hidden="true">
+        H
+      </div>
+      <div>
+        <p className="eyebrow">Main character</p>
+        <h2 id="hector-heading">Hector</h2>
+        <p>{state.hector.summary}</p>
+        <dl className="stat-grid">
+          <div>
+            <dt>HP</dt>
+            <dd>{stats.maxHp}</dd>
+          </div>
+          <div>
+            <dt>MP</dt>
+            <dd>{stats.maxMp}</dd>
+          </div>
+          <div>
+            <dt>Attack</dt>
+            <dd>{stats.attack}</dd>
+          </div>
+          <div>
+            <dt>Defense</dt>
+            <dd>{stats.defense}</dd>
+          </div>
+          <div>
+            <dt>Speed</dt>
+            <dd>{stats.speed}</dd>
+          </div>
+          <div>
+            <dt>Luck</dt>
+            <dd>{stats.luck}</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+function HousePanel() {
+  const { state } = useGameState();
+
+  return (
+    <section className="panel house-panel" aria-labelledby="house-heading">
+      <div className="section-heading">
+        <Home aria-hidden="true" />
+        <div>
+          <p className="eyebrow">Terraced house</p>
+          <h2 id="house-heading">Day Rooms</h2>
+        </div>
+      </div>
+      <div className="room-grid">
+        {state.house.rooms.map((room) => (
+          <article className="room-card" key={room.id}>
+            <p className="room-floor">Floor {room.floor}</p>
+            <h3>{room.name}</h3>
+            <p>{room.activity}</p>
+            <small>Tier {room.upgradeTier}: {room.effect}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PhaseControls() {
+  const { state, setState } = useGameState();
+  const isDay = state.phase === 'day';
+
+  function startNight() {
+    setState((currentState) => ({
+      ...currentState,
+      phase: 'night',
+      currentRun: {
+        level: 1,
+        xp: 0,
+        hp: currentState.hector.stats.maxHp,
+        mp: currentState.hector.stats.maxMp,
+        abilities: [],
+        items: [],
+        map: [],
+        currentNodeId: null,
+        completedNodeIds: [],
+        status: 'exploring',
+      },
+    }));
   }
 
-  function roomIdFromPoint(x, y) {
-    const element = document.elementFromPoint(x, y);
-    return element?.closest('[data-room-id]')?.dataset.roomId ?? null;
+  function returnHome() {
+    setState((currentState) => ({
+      ...currentState,
+      day: currentState.day + 1,
+      phase: 'day',
+      currentRun: null,
+    }));
   }
 
-  function startCatDrag(catId, event) {
-    if (event.button !== undefined && event.button !== 0) {
-      return;
-    }
+  return (
+    <section className="panel control-panel" aria-labelledby="phase-heading">
+      <PhaseBadge />
+      <h2 id="phase-heading">{isDay ? 'Prepare for tonight' : 'Back Alley run started'}</h2>
+      <p>
+        {isDay
+          ? 'The full day timer and room preparation loop comes next. For now, the clean Hector save and phase flow are active.'
+          : 'The generated map and combat engine come next. Returning home clears this placeholder run.'}
+      </p>
+      {isDay ? (
+        <button className="primary-button" type="button" onClick={startNight}>
+          Start Night
+        </button>
+      ) : (
+        <button className="primary-button" type="button" onClick={returnHome}>
+          Return Home
+        </button>
+      )}
+    </section>
+  );
+}
 
-    event.preventDefault();
-
-    const nextDragState = {
-      catId,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      x: event.clientX,
-      y: event.clientY,
-      isDragging: false,
-    };
-
-    dragRef.current = nextDragState;
-    setDragState(nextDragState);
-  }
-
-  useEffect(() => {
-    if (!isTrackingDrag) {
-      return undefined;
-    }
-
-    function handlePointerMove(event) {
-      const currentDrag = dragRef.current;
-      if (!currentDrag || event.pointerId !== currentDrag.pointerId) {
-        return;
-      }
-
-      const moved = Math.hypot(event.clientX - currentDrag.startX, event.clientY - currentDrag.startY);
-      const nextDragState = {
-        ...currentDrag,
-        x: event.clientX,
-        y: event.clientY,
-        isDragging: currentDrag.isDragging || moved >= DRAG_THRESHOLD,
-      };
-
-      dragRef.current = nextDragState;
-      setDragState(nextDragState);
-      setHoveredRoomId(nextDragState.isDragging ? roomIdFromPoint(event.clientX, event.clientY) : null);
-    }
-
-    function handlePointerUp(event) {
-      const currentDrag = dragRef.current;
-      if (!currentDrag || event.pointerId !== currentDrag.pointerId) {
-        return;
-      }
-
-      const finalDrag = {
-        ...currentDrag,
-        x: event.clientX,
-        y: event.clientY,
-      };
-
-      if (finalDrag.isDragging) {
-        const roomId = roomIdFromPoint(event.clientX, event.clientY);
-        if (roomId) {
-          const dropResult = assignCat(stateRef.current, finalDrag.catId, roomId, Date.now());
-          if (dropResult.ok) {
-            const nowMs = Date.now();
-            let nextState = dropResult.state;
-            if (nextState.tutorialStep === 0 && finalDrag.catId === 'miso' && roomId === 'bedroom') {
-              nextState = {
-                ...nextState,
-                tutorialStep: 1,
-                cats: nextState.cats.map((cat) =>
-                  cat.id === 'miso'
-                    ? {
-                        ...cat,
-                        currentState: 'sleeping',
-                        stateEnteredAt: nowMs,
-                        stateTransitionDue: sampleTransitionDue('sleeping', cat, nowMs),
-                      }
-                    : cat,
-                ),
-              };
-            } else if (nextState.tutorialStep === 0) {
-              nextState = { ...nextState, tutorialStep: 1 };
-            }
-            setState(nextState);
-          } else {
-            showRoomMessage(roomId, dropResult.reason);
-          }
-        }
-      } else {
-        setActiveCatInfoId(finalDrag.catId);
-      }
-
-      dragRef.current = null;
-      setDragState(null);
-      setHoveredRoomId(null);
-    }
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
-
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-    };
-  }, [isTrackingDrag, setState]);
-
-  useEffect(() => () => window.clearTimeout(messageTimeoutRef.current), []);
-
-  function handleResetSave() {
+function DebugPanel() {
+  function handleReset() {
     resetSave();
     window.location.reload();
   }
 
-  function openCats() {
-    if (isDesktop) {
-      setSidePanel('cats');
-    } else {
-      setCatsOpen(true);
-    }
-  }
+  return (
+    <div className="debug-row">
+      <button className="debug-reset" type="button" onClick={handleReset}>
+        <RotateCcw aria-hidden="true" />
+        Reset save
+      </button>
+    </div>
+  );
+}
 
-  function openHouse() {
-    setCatsOpen(false);
-    setDiaryOpen(false);
-    setActiveRoomId(null);
-    setActiveCatInfoId(null);
-    if (isDesktop) {
-      setSidePanel('cats');
-    }
-  }
-
-  function openRoomDetail(roomId) {
-    setActiveRoomId(roomId);
-    if (isDesktop) {
-      setSidePanel('room');
-    }
-    if (state.tutorialStep === 3) {
-      setState((currentState) => ({ ...currentState, tutorialStep: 4 }));
-    }
-  }
-
+function Game() {
   return (
     <div className="app-shell">
       <ResourceBar />
-      <div className="top-actions">
-        <button type="button" onClick={openCats}>Cats</button>
-        <button type="button" onClick={() => setDiaryOpen(true)}>Diary</button>
-      </div>
-      <div className="game-layout">
-        <Diorama
-          draggingCatId={dragState?.isDragging ? dragState.catId : null}
-          hoveredRoomId={hoveredRoomId}
-          roomMessage={roomMessage}
-          onOpenCatInfo={setActiveCatInfoId}
-          onOpenRoomDetail={openRoomDetail}
-        />
-        <aside className="desktop-side-panel" aria-label="Tower side panel">
-          {sidePanel === 'room' && activeRoomId ? (
-            <RoomDetailPanel
-              roomId={activeRoomId}
-              embedded
-              onOpenCatInfo={(catId) => {
-                setActiveCatInfoId(catId);
-              }}
-            />
-          ) : (
-            <CatRosterScreen embedded />
-          )}
-        </aside>
-      </div>
-      <div className="debug-row">
-        <button className="debug-reset" type="button" onClick={handleResetSave}>
-          Reset save
-        </button>
-      </div>
-      <CatRoster
-        draggingCatId={dragState?.catId ?? null}
-        isDragging={Boolean(dragState?.isDragging)}
-        onCatPointerDown={startCatDrag}
-        onOpenCatInfo={setActiveCatInfoId}
-      />
-      {dragState?.isDragging ? (
-        <div
-          className="cat-drag-ghost"
-          style={{ '--drag-x': `${dragState.x}px`, '--drag-y': `${dragState.y}px` }}
-          aria-hidden="true"
-        >
-          {dragState.catId.charAt(0).toUpperCase()}
+      <main className="app-main">
+        <PhaseControls />
+        <div className="dashboard-grid">
+          <HectorPanel />
+          <HousePanel />
         </div>
-      ) : null}
-      {activeCatInfoId ? <CatInfoPanel catId={activeCatInfoId} onClose={() => setActiveCatInfoId(null)} /> : null}
-      {activeRoomId && !isDesktop ? (
-        <RoomDetailPanel
-          roomId={activeRoomId}
-          onClose={() => setActiveRoomId(null)}
-          onOpenCatInfo={(catId) => {
-            setActiveCatInfoId(catId);
-          }}
-        />
-      ) : null}
-      {catsOpen ? <CatRosterScreen onClose={() => setCatsOpen(false)} /> : null}
-      {diaryOpen ? <CatDiary onClose={() => setDiaryOpen(false)} /> : null}
-      <EventCardStack events={liveEvents} onDismiss={dismissLiveEvent} />
-      <Tutorial />
-      <OfflineSummaryOverlay />
-      <nav className="mobile-tab-bar" aria-label="Main tabs">
-        <button type="button" onClick={openHouse}>House</button>
-        <button type="button" onClick={openCats}>Cats</button>
-        <button type="button" onClick={() => setDiaryOpen(true)}>Diary</button>
-      </nav>
+        <DebugPanel />
+      </main>
     </div>
   );
 }

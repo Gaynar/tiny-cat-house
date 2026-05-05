@@ -1,6 +1,6 @@
 import { createInitialState } from './initialState.js';
 
-export const SAVE_KEY = 'kittyTowerIdle_save';
+export const SAVE_KEY = 'hectorsAdventure_save';
 
 function mergeById(defaultItems, savedItems) {
   if (!Array.isArray(savedItems)) {
@@ -54,8 +54,7 @@ export function loadGame() {
   }
 
   try {
-    const savedState = JSON.parse(rawSave);
-    return deepMerge(freshState, savedState);
+    return deepMerge(freshState, JSON.parse(rawSave));
   } catch {
     return freshState;
   }
