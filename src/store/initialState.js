@@ -1,40 +1,5 @@
-const HOUSE_ROOMS = [
-  {
-    id: 'attic',
-    name: 'Attic',
-    floor: 3,
-    activity: 'Storage',
-    effect: 'Prepared item storage later',
-  },
-  {
-    id: 'bedroom',
-    name: 'Bedroom',
-    floor: 2,
-    activity: 'Nap',
-    effect: '+5 Max HP when upgraded',
-  },
-  {
-    id: 'storage_washing_room',
-    name: 'Storage/Washing Room',
-    floor: 2,
-    activity: 'Litterbox',
-    effect: '+1 Luck when upgraded',
-  },
-  {
-    id: 'living_room',
-    name: 'Living Room',
-    floor: 1,
-    activity: 'Play',
-    effect: '+1 Attack when upgraded',
-  },
-  {
-    id: 'kitchen',
-    name: 'Kitchen',
-    floor: 1,
-    activity: 'Eat',
-    effect: '+1 Canned Tuna per day when upgraded',
-  },
-];
+import { hector } from '../data/hector.js';
+import { houseRooms } from '../data/houseRooms.js';
 
 export function createInitialState() {
   return {
@@ -46,25 +11,19 @@ export function createInitialState() {
       cannedTuna: 0,
     },
     house: {
-      rooms: HOUSE_ROOMS.map((room) => ({
+      rooms: houseRooms.map((room) => ({
         ...room,
         unlocked: true,
         upgradeTier: 0,
       })),
     },
     hector: {
-      id: 'hector',
-      name: 'Hector',
-      classId: 'fighter',
-      summary: 'Sweet and cute during the day, tough after dark.',
-      stats: {
-        maxHp: 30,
-        maxMp: 10,
-        attack: 5,
-        defense: 2,
-        speed: 4,
-        luck: 3,
-      },
+      id: hector.id,
+      name: hector.name,
+      classId: hector.classId,
+      className: hector.className,
+      summary: hector.summary,
+      stats: { ...hector.startingStats },
     },
     currentRun: null,
     settings: {
